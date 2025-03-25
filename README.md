@@ -67,11 +67,29 @@ of this code is accessible to remote attackers.
 
 ### Building
 
-To build the test client, simply type `make`.
+This fork depends on submodules:
 
 ```
-$ make
+git submodule init
+git submodule update
 ```
+
+To build the test original 32-bit client:
+
+```
+$ make clean
+$ make peloader
+$ make mpclient
+```
+
+To build the x64 version:
+
+```
+$ make clean
+$ make peloader_x64
+$ make mpclient_x64
+```
+
 
 ### Dependencies
 
