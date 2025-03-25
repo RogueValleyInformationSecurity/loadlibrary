@@ -11,3 +11,4 @@ eicar.com
 .gradle/
 .idea/
 mpcache-*
+.vscode/

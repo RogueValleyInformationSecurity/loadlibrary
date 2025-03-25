@@ -18,12 +18,21 @@
 #define MB_ERR_INVALID_CHARS 8
 #define MB_PRECOMPOSED 1
 
-STATIC int WINAPI
-MultiByteToWideChar(UINT CodePage, DWORD dwFlags, PCHAR lpMultiByteStr, int cbMultiByte, PUSHORT lpWideCharStr,
-                    int cchWideChar) {
+STATIC int WINAPI MultiByteToWideChar(UINT CodePage,
+                                      DWORD dwFlags,
+                                      PCHAR lpMultiByteStr,
+                                      int cbMultiByte,
+                                      PUSHORT lpWideCharStr,
+                                      int cchWideChar)
+{
     size_t i;
 
-    DebugLog("%u, %#x, %p, %u, %p, %u", CodePage, dwFlags, lpMultiByteStr, cbMultiByte, lpWideCharStr, cchWideChar);
+    DebugLog("%u, %#x, %p, %u, %p, %u", CodePage,
+                                        dwFlags,
+                                        lpMultiByteStr,
+                                        cbMultiByte,
+                                        lpWideCharStr,
+                                        cchWideChar);
 
     if ((dwFlags & ~(MB_ERR_INVALID_CHARS | MB_PRECOMPOSED)) != 0) {
         LogMessage("Unsupported Conversion Flags %#x", dwFlags);
@@ -106,6 +115,15 @@ STATIC BOOL WINAPI GetStringTypeA(DWORD locale, DWORD dwInfoType, PUSHORT lpSrcS
     return FALSE;
 }
 
+STATIC BOOL WINAPI GetStringTypeExA(DWORD locale, DWORD dwInfoType, PUSHORT lpSrcStr, int cchSrc, PUSHORT lpCharType)
+{
+    DebugLog("%u, %u, %p, %d, %p", locale, dwInfoType, lpSrcStr, cchSrc, lpCharType);
+
+    memset(lpCharType, 1, cchSrc * sizeof(USHORT));
+
+    return TRUE;
+}
+
 
 STATIC BOOL WINAPI GetStringTypeW(DWORD dwInfoType, PUSHORT lpSrcStr, int cchSrc, PUSHORT lpCharType) {
     DebugLog("%u, %p, %d, %p", dwInfoType, lpSrcStr, cchSrc, lpCharType);
@@ -115,7 +133,17 @@ STATIC BOOL WINAPI GetStringTypeW(DWORD dwInfoType, PUSHORT lpSrcStr, int cchSrc
     return FALSE;
 }
 
-STATIC VOID WINAPI RtlInitUnicodeString(PUNICODE_STRING DestinationString, PWCHAR SourceString) {
+STATIC BOOL WINAPI GetStringTypeExW(DWORD locale, DWORD dwInfoType, PUSHORT lpSrcStr, int cchSrc, PUSHORT lpCharType)
+{
+    DebugLog("%u, %p, %d, %p", dwInfoType, lpSrcStr, cchSrc, lpCharType);
+
+    memset(lpCharType, 1, cchSrc * sizeof(USHORT));
+
+    return TRUE;
+}
+
+STATIC VOID WINAPI RtlInitUnicodeString(PUNICODE_STRING DestinationString, PWCHAR SourceString)
+{
     DestinationString->Length = CountWideChars(SourceString) * 2;
     DestinationString->MaximumLength = DestinationString->Length;
     DestinationString->Buffer = SourceString;
@@ -145,21 +173,80 @@ STATIC INT WINAPI UuidCreate(PBYTE Uuid) {
     return 0;
 }
 
-STATIC int WINAPI CompareStringOrdinal(LPCWCH lpString1,
-                                       int cchCount1,
-                                       LPCWCH lpString2,
-                                       int cchCount2,
-                                       BOOL bIgnoreCase) {
-    char *string1 = CreateAnsiFromWide(lpString1);
-    char *string2 = CreateAnsiFromWide(lpString2);
-    DebugLog("%p [%s] %hhx %p [%s] %hhx", lpString1, string1, cchCount1, lpString2, string2, cchCount2);
+#define CSTR_LESS_THAN    1
+#define CSTR_EQUAL        2
+#define CSTR_GREATER_THAN 3
 
-    if (strlen(string1) < strlen(string2))
+STATIC INT WINAPI CompareStringOrdinal(PVOID lpString1,
+                                       INT cchCount1,
+                                       PVOID lpString2,
+                                       INT cchCount2,
+                                       BOOL bIgnoreCase)
+{
+    int Result;
+    int Length;
+    PVOID lpt1;
+    PVOID lpt2;
+
+    DebugLog("%p, %d, %p, %d, %d", lpString1,
+                                   cchCount1,
+                                   lpString2,
+                                   cchCount2,
+                                   bIgnoreCase);
+
+    if (cchCount1 == -1)
+        cchCount1 = CountWideChars(lpString1);
+
+    if (cchCount2 == -1)
+        cchCount2 = CountWideChars(lpString2);
+
+    lpt1 = calloc(cchCount1 + 1, 2);
+    lpt2 = calloc(cchCount2 + 1, 2);
+
+    if (!lpt1 || !lpt2) {
+        // "The function returns 0 if it does not succeed."
+        free(lpt1);
+        free(lpt2);
+        return 0;
+    }
+
+    memcpy(lpt1, lpString1, cchCount1 * 2);
+    memcpy(lpt2, lpString2, cchCount2 * 2);
+
+    Result = bIgnoreCase
+        ? wcsicmp(lpt1, lpt2)
+        : wcscmp(lpt1, lpt2);
+
+    free(lpt1);
+    free(lpt2);
+
+    // I am not sure if this logic is correct, I just read the msdn page and
+    // wrote it blindly.
+
+    if (Result < 0)
         return CSTR_LESS_THAN;
-    else if (strlen(string1) == strlen(string2))
+    if (Result == 0)
         return CSTR_EQUAL;
-    else
-        return CSTR_GREATER_THAN;
+
+    return CSTR_GREATER_THAN;
+}
+
+static BOOL WINAPI ConvertStringSecurityDescriptorToSecurityDescriptorW(PUSHORT StringSecurityDescriptor, DWORD StringSDRevision, PVOID *SecurityDescriptor, PULONG SecurityDescriptorSize)
+{
+    //The SECURITY_DESCRIPTOR struct is not well documented and is a mess to construct. 
+    //Could implement the actual conversion but reading React OS source suggests this would be a massive pain.
+    //This is just the raw struct data returned from feeding the requested SD string through the same API on a Windows system.
+    //S:P(TL;;FRFX;;;S-1-19-512-1536)
+    BYTE psd[52] = {0x01, 0x00, 0x10, 0xa0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 
+                    0x20, 0x00, 0x01, 0x00, 0x00, 0x00, 0x14, 0x00, 0x18, 0x00, 0xa9,
+                    0x00, 0x12, 0x00, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13,
+                    0x00, 0x02, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00};
+
+    SecurityDescriptor = (PVOID)psd;
+
+    DebugLog("%p", SecurityDescriptor);
+    return TRUE;
 }
 
 DECLARE_CRT_EXPORT("MultiByteToWideChar", MultiByteToWideChar);
@@ -168,7 +255,11 @@ DECLARE_CRT_EXPORT("WideCharToMultiByte", WideCharToMultiByte);
 
 DECLARE_CRT_EXPORT("GetStringTypeA", GetStringTypeA);
 
+DECLARE_CRT_EXPORT("GetStringTypeExA", GetStringTypeExA);
+
 DECLARE_CRT_EXPORT("GetStringTypeW", GetStringTypeW);
+
+DECLARE_CRT_EXPORT("GetStringTypeExW", GetStringTypeExW);
 
 DECLARE_CRT_EXPORT("RtlInitUnicodeString", RtlInitUnicodeString);
 
@@ -177,3 +268,6 @@ DECLARE_CRT_EXPORT("UuidFromStringW", UuidFromStringW);
 DECLARE_CRT_EXPORT("UuidCreate", UuidCreate);
 
 DECLARE_CRT_EXPORT("CompareStringOrdinal", CompareStringOrdinal);
+
+DECLARE_CRT_EXPORT("ConvertStringSecurityDescriptorToSecurityDescriptorW", ConvertStringSecurityDescriptorToSecurityDescriptorW);
+

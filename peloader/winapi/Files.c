@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <wchar.h>
 
 #include "winnt_types.h"
 #include "pe_linker.h"
@@ -260,8 +261,15 @@ static HANDLE WINAPI FindFirstFileW(PWCHAR lpFileName, PVOID lpFindFileData) {
     return INVALID_HANDLE_VALUE;
 }
 
-static DWORD WINAPI NtOpenSymbolicLinkObject(PHANDLE LinkHandle, DWORD DesiredAccess, PVOID ObjectAttributes) {
+static DWORD WINAPI GetCurrentDirectoryW(DWORD BufferLength, LPWSTR Buffer) 
+{
     DebugLog("");
+    Buffer = L"C:\\Windows\\System32";
+    return wcslen(Buffer);
+}
+
+static DWORD WINAPI NtOpenSymbolicLinkObject(PHANDLE LinkHandle, DWORD DesiredAccess, PVOID ObjectAttributes)
+{
     *LinkHandle = (HANDLE) 'SYMB';
     return STATUS_SUCCESS;
 }
@@ -406,6 +414,8 @@ DECLARE_CRT_EXPORT("DeleteFileW", DeleteFileW);
 DECLARE_CRT_EXPORT("GetFileSizeEx", GetFileSizeEx);
 
 DECLARE_CRT_EXPORT("FindFirstFileW", FindFirstFileW);
+
+DECLARE_CRT_EXPORT("GetCurrentDirectoryW", GetCurrentDirectoryW);
 
 DECLARE_CRT_EXPORT("NtOpenSymbolicLinkObject", NtOpenSymbolicLinkObject);
 

@@ -45,6 +45,9 @@ STATIC LONG WINAPI RegOpenKeyExW(HANDLE hKey, PVOID lpSubKey, DWORD ulOptions, D
     } else if (strstr(ansikey, "ProfileList")) {
         *phkResult = (HANDLE) 'REG2';
         Result = 0;
+    } else if (strstr(ansikey, "DataCollection")) {
+        *phkResult = (HANDLE) 'REG3';
+        Result = 0;
     }
     free(ansikey);
     return Result;
@@ -212,6 +215,17 @@ RegCreateKeyExW(HANDLE hKey, PVOID lpSubKey, DWORD Reserved, PVOID lpClass, DWOR
     return 0;
 }
 
+STATIC NTSTATUS WINAPI RegQueryValueExW(HANDLE hKey,
+                                        PVOID lpValueName,
+                                        PDWORD lpReserved,
+                                        PDWORD lpType,
+                                        PBYTE lpData,
+                                        PDWORD lpcbData)
+{
+    DebugLog("%p, %p, %p, %p, %p, %p", hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
+    return 2;
+}
+
 
 DECLARE_CRT_EXPORT("RegOpenKeyExW", RegOpenKeyExW);
 
@@ -224,4 +238,5 @@ DECLARE_CRT_EXPORT("NtEnumerateValueKey", NtEnumerateValueKey);
 DECLARE_CRT_EXPORT("NtQueryValueKey", NtQueryValueKey);
 
 DECLARE_CRT_EXPORT("RegCreateKeyExW", RegCreateKeyExW);
+DECLARE_CRT_EXPORT("RegQueryValueExW", RegQueryValueExW);
 

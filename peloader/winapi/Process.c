@@ -20,38 +20,36 @@ STATIC NTSTATUS WINAPI NtSetInformationProcess(HANDLE ProcessHandle,
     return 0;
 }
 
-STATIC BOOL WINAPI QueryFullProcessImageNameW(HANDLE hProcess,
-                                              DWORD dwFlags,
-                                              LPWSTR lpExeName,
-                                              PDWORD lpdwSize) {
-    DebugLog("");
-    if (dwFlags == 0)
-        lpExeName = L"C:\\nice\\path\\to\\binary.exe";
-    else
-        lpExeName = L"\\??\\C:\\nice\\path\\to\\binary.exe";
-    return true;
+STATIC BOOL WINAPI OpenProcessToken(HANDLE ProcessHandle,
+                                    ACCESS_MASK DesiredAccess,
+                                    PHANDLE TokenHandle)
+{
+    DebugLog("%p", ProcessHandle);
+    return FALSE;
 }
 
-STATIC BOOL WINAPI GetProcessMitigationPolicy(HANDLE hProcess,
-                                              PROCESS_MITIGATION_POLICY MitigationPolicy,
-                                              PVOID lpBuffer,
-                                              SIZE_T dwLength) {
-    DebugLog("%p %hx %p", hProcess, MitigationPolicy, lpBuffer);
-    return true;
+STATIC BOOL WINAPI GetExitCodeProcess(HANDLE ProcessHandle,
+                                    PDWORD ExitCode)
+{
+DebugLog("%p", ProcessHandle);
+    //Status Pending
+    *ExitCode = 0x103;
+    return TRUE;
 }
 
-STATIC BOOL WINAPI SetProcessInformation(HANDLE hProcess,
-                                         PROCESS_INFORMATION_CLASS ProcessInformationClass,
-                                         PVOID ProcessInformation,
-                                         DWORD ProcessInformationSize) {
-    DebugLog("%p %hx %p", hProcess, ProcessInformationClass, ProcessInformation);
-    return true;
+STATIC BOOL WINAPI QueryFullProcessImageNameW(HANDLE ProcessHandle,
+                                                DWORD Flags,
+                                                LPWSTR ExeName,
+                                                PDWORD Size)
+{
+    DebugLog("Handle: %p, Size: %d", ProcessHandle, *Size);
+    ExeName = L"MsMpEng.exe";
+    *Size = 11;
+    return TRUE;
 }
-
-DECLARE_CRT_EXPORT("QueryFullProcessImageNameW", QueryFullProcessImageNameW);
 
 DECLARE_CRT_EXPORT("NtSetInformationProcess", NtSetInformationProcess);
+DECLARE_CRT_EXPORT("OpenProcessToken", OpenProcessToken);
+DECLARE_CRT_EXPORT("GetExitCodeProcess", GetExitCodeProcess);
+DECLARE_CRT_EXPORT("QueryFullProcessImageNameW", QueryFullProcessImageNameW);
 
-DECLARE_CRT_EXPORT("GetProcessMitigationPolicy", GetProcessMitigationPolicy);
-
-DECLARE_CRT_EXPORT("SetProcessInformation", SetProcessInformation);

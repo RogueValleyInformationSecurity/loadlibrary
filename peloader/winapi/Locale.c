@@ -27,7 +27,14 @@ STATIC UINT GetACP(void) {
     return 65001;   // UTF-8
 }
 
-STATIC WINAPI BOOL IsValidCodePage(UINT CodePage) {
+STATIC WINAPI BOOL AreFileApisANSI()
+{
+    DebugLog("");
+    return 0;
+}
+
+STATIC WINAPI BOOL IsValidCodePage(UINT CodePage)
+{
     DebugLog("%u", CodePage);
 
     return TRUE;
@@ -49,8 +56,21 @@ STATIC DWORD LocaleNameToLCID(PVOID lpName, DWORD dwFlags) {
     return 0;
 }
 
-STATIC WINAPI int
-LCMapStringW(DWORD Locale, DWORD dwMapFlags, PVOID lpSrcStr, int cchSrc, PVOID lpDestStr, int cchDest) {
+STATIC DWORD GetUserDefaultLCID()
+{
+    //value of LOCALE_USER_DEFAULT
+    DebugLog("");
+    return 0x0400;
+}
+
+STATIC WINAPI int LCMapStringA(DWORD Locale, DWORD dwMapFlags, PVOID lpSrcStr, int cchSrc, PVOID lpDestStr, int cchDest)
+{
+    DebugLog("%u, %#x, %p, %d, %p, %d", Locale, dwMapFlags, lpSrcStr, cchSrc, lpDestStr, cchDest);
+    return 1;
+}
+
+STATIC WINAPI int LCMapStringW(DWORD Locale, DWORD dwMapFlags, PVOID lpSrcStr, int cchSrc, PVOID lpDestStr, int cchDest)
+{
     DebugLog("%u, %#x, %p, %d, %p, %d", Locale, dwMapFlags, lpSrcStr, cchSrc, lpDestStr, cchDest);
     return 1;
 }
@@ -82,14 +102,21 @@ STATIC WINAPI int GetLocaleInfoEx(LPCWSTR lpLocaleName, DWORD LCType, LPWSTR lpL
 
 DECLARE_CRT_EXPORT("GetACP", GetACP);
 
+DECLARE_CRT_EXPORT("AreFileApisANSI", AreFileApisANSI);
+
 DECLARE_CRT_EXPORT("IsValidCodePage", IsValidCodePage);
 
 DECLARE_CRT_EXPORT("GetCPInfo", GetCPInfo);
 
 DECLARE_CRT_EXPORT("LocaleNameToLCID", LocaleNameToLCID);
 
+DECLARE_CRT_EXPORT("GetUserDefaultLCID", GetUserDefaultLCID);
+
+DECLARE_CRT_EXPORT("LCMapStringA", LCMapStringA);
+
 DECLARE_CRT_EXPORT("LCMapStringW", LCMapStringW);
 
 DECLARE_CRT_EXPORT("LCMapStringEx", LCMapStringEx);
 
 DECLARE_CRT_EXPORT("GetLocaleInfoEx", GetLocaleInfoEx);
+
