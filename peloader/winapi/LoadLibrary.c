@@ -127,6 +127,24 @@ static BOOL WINAPI GetModuleHandleExA(DWORD dwFlags,
     return true;
 }
 
+static BOOL WINAPI GetModuleHandleExW(DWORD dwFlags,
+                                      LPCWSTR lpModuleName,
+                                      HMODULE *phModule) {
+    DebugLog("%p flags: %x", lpModuleName, dwFlags);
+    DebugLog("This is probably not handled correctly...");
+    if (dwFlags & 4){ // GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+//        if ((int)lpModuleName & 0x75a000000 == 0x75a000000){
+            *phModule = (HANDLE) 'MPEN';
+            return true;
+//        }
+    }else{
+        DebugLog("%s", lpModuleName);
+    }
+    *phModule = (HANDLE) NULL;
+    return true;
+}
+
+
 static VOID WINAPI FreeLibrary(PVOID hLibModule) {
     DebugLog("FreeLibrary(%p)", hLibModule);
 }
@@ -149,3 +167,5 @@ DECLARE_CRT_EXPORT("GetModuleFileNameA", GetModuleFileNameA);
 DECLARE_CRT_EXPORT("GetModuleFileNameW", GetModuleFileNameW);
 
 DECLARE_CRT_EXPORT("GetModuleHandleExA", GetModuleHandleExA);
+
+DECLARE_CRT_EXPORT("GetModuleHandleExW", GetModuleHandleExW);

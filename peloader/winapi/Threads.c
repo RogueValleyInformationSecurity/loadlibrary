@@ -138,6 +138,30 @@ static WINAPI void name() {
     __debugbreak();
 }
 
+static WINAPI HANDLE CreateThread(
+  LPVOID   lpThreadAttributes,
+  SIZE_T                  dwStackSize,
+  LPVOID  lpStartAddress,
+  LPVOID lpParameter,
+  DWORD                   dwCreationFlags,
+  LPDWORD                 lpThreadId
+){
+
+DebugLog("");
+return 0x41414141;
+
+}
+
+static WINAPI BOOL GetExitCodeThread(
+  HANDLE  hThread,
+  LPDWORD lpExitCode
+){
+    DebugLog("");
+    return 1;
+}
+
+DECLARE_CRT_EXPORT("GetExitCodeThread", GetExitCodeThread);
+DECLARE_CRT_EXPORT("CreateThread", CreateThread);
 
 DECLARE_CRT_EXPORT("CreateThreadPoolWait", CreateThreadPoolWait);
 

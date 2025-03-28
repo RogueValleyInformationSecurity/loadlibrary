@@ -208,8 +208,9 @@ static BOOL WINAPI CloseHandle(HANDLE hObject) {
     DebugLog("%p", hObject);
     if (hObject != (HANDLE) 'EVNT'
         && hObject != INVALID_HANDLE_VALUE
-        && hObject != (HANDLE) 'SEMA')
-        fclose(hObject);
+        && hObject != (HANDLE) 'SEMA'
+        && hObject != 0x41414141)
+            fclose(hObject);
     return TRUE;
 }
 

@@ -224,8 +224,63 @@ STATIC PVOID WINAPI RegQueryReflectionKey() {
     exit(1);
 }
 
+STATIC PVOID WINAPI GetTempPath2W() {
+    DebugLog("Not implemented.");
+    exit(1);
+}
+
+STATIC BOOL WINAPI InitializeSecurityDescriptor(
+  PVOID pSecurityDescriptor,
+  DWORD                dwRevision
+){
+    DebugLog("Returning success from InitializeSecurityDescriptor");
+    return 1;
+};
+
+STATIC BOOL WINAPI SetSecurityDescriptorDacl(
+  PVOID pSecurityDescriptor,
+  BOOL  bDaclPresent,
+  PVOID pDacl,
+  BOOL                 bDaclDefaulted
+){
+
+    DebugLog("Returning success from SetSecurityDescriptorDacl");
+    return 1;
+};
+
+
+STATIC DWORD WINAPI RegGetValueA(
+  PVOID   hkey,
+  LPCSTR  lpSubKey,
+  LPCSTR  lpValue,
+  DWORD   dwFlags,
+  LPDWORD pdwType,
+  PVOID   pvData,
+  LPDWORD pcbData
+){
+    DebugLog(lpValue);
+    if (pvData != NULL && !strcmp(lpValue, "CurrentVersion") && *pcbData >= 4){
+        strcpy(pvData, "6.3");
+        *pcbData=4;
+        return 0;
+    }
+    char* prod_name="Windows Server 2022 Standard";
+    size_t prod_name_len=strlen(prod_name);
+    if (pvData != NULL && !strcmp(lpValue, "ProductName") && *pcbData >= prod_name_len){
+        strcpy(pvData, prod_name);
+        *pcbData=prod_name_len;
+        return 0;
+    }
+
+    return 1;
+}
+
+DECLARE_CRT_EXPORT("RegGetValueA", RegGetValueA);
+DECLARE_CRT_EXPORT("SetSecurityDescriptorDacl", SetSecurityDescriptorDacl);
+DECLARE_CRT_EXPORT("InitializeSecurityDescriptor", InitializeSecurityDescriptor);
 DECLARE_CRT_EXPORT("AreFileApisANSI", AreFileApisANSI);
-//DECLARE_CRT_EXPORT("CompareStringEx", CompareStringEx);
+DECLARE_CRT_EXPORT("CompareStringEx", CompareStringEx);
+DECLARE_CRT_EXPORT("GetTempPath2W", GetTempPath2W);
 DECLARE_CRT_EXPORT("EnumSystemLocalesEx", EnumSystemLocalesEx);
 
 DECLARE_CRT_EXPORT("GetDateFormatEx", GetDateFormatEx);
