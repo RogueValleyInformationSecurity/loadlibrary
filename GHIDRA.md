@@ -22,10 +22,11 @@ Now this is pretty awesome/crazy, but a bit cumbersome esp. because I don't use 
   * You can leave the rest as is or tweak according to your needs
 4. You can launch the debugee, it'll stop on `_start`, then for displaying symbol loading instructions.
 5. Open `Window > Debugger > Static Mappings` and click the little green plus icon in the top right corner to add a new mapping:
-  * Program: mpengine.dll
+  * Program: mpengine.dll - This is a read-only field that gets appropriately set if the listing of `mpengine.dll` is active in Debuggers Static Listing
   * Static range: `ram`:`75a101000`,`75ad99ff` (addresses correspond `mpengine.dll`s `.text` section)
   * Trace: mpclient
   * Dynamic range: _Same as Static_
   * You can leave the rest alone
 
+You can set breakpoints in `mpengine.dll` memory after the file is mmap'd - if you create an (empty) `mpengine.map` file mpclient will trap a convenient place (see the original debug process), but be sure to continue execution with mpclient's Static Listing active, otherwise Ghidra will hang for several minutes (don't know why).
 
