@@ -21,7 +21,7 @@ typedef struct _cpinfo {
   BYTE LeadByte[MAX_LEADBYTES];
 } CPINFO, *LPCPINFO;
 
-STATIC UINT GetACP(void)
+STATIC WINAPI UINT GetACP(void)
 {
     DebugLog("");
 
@@ -53,13 +53,13 @@ STATIC WINAPI BOOL GetCPInfo(UINT CodePage, LPCPINFO lpCPInfo)
     return TRUE;
 }
 
-STATIC DWORD LocaleNameToLCID(PVOID lpName, DWORD dwFlags)
+STATIC WINAPI DWORD LocaleNameToLCID(PVOID lpName, DWORD dwFlags)
 {
     DebugLog("%p, %#x", lpName, dwFlags);
     return 0;
 }
 
-STATIC DWORD GetUserDefaultLCID()
+STATIC WINAPI DWORD GetUserDefaultLCID()
 {
     //value of LOCALE_USER_DEFAULT
     DebugLog("");

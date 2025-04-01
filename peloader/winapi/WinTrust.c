@@ -25,14 +25,14 @@ STATIC WINAPI HANDLE CryptCATAdminEnumCatalogFromHash(HANDLE hCatAdmin, BYTE *pb
     return NULL;
 }
 
-STATIC BOOL CryptCATAdminCalcHashFromFileHandle(VOID) { DebugLog("FIXME"); return 0; }
-STATIC BOOL CryptCATAdminReleaseCatalogContext(VOID) { DebugLog("FIXME"); return 0; }
-STATIC BOOL CryptCATAdminReleaseContext(VOID) { DebugLog("FIXME"); return 0; }
-STATIC BOOL CryptCATCatalogInfoFromContext(VOID) { DebugLog("FIXME"); return 0; }
-STATIC BOOL WTHelperGetProvCertFromChain(VOID) { DebugLog("FIXME"); return 0; }
-STATIC BOOL WTHelperGetProvSignerFromChain(VOID) { DebugLog("FIXME"); return 0; }
-STATIC BOOL WTHelperProvDataFromStateData(VOID) { DebugLog("FIXME"); return 0; }
-STATIC BOOL WinVerifyTrust(VOID) { DebugLog("FIXME"); return 0; }
+STATIC WINAPI BOOL CryptCATAdminCalcHashFromFileHandle(VOID) { DebugLog("FIXME"); return 0; }
+STATIC WINAPI BOOL CryptCATAdminReleaseCatalogContext(VOID) { DebugLog("FIXME"); return 0; }
+STATIC WINAPI BOOL CryptCATAdminReleaseContext(VOID) { DebugLog("FIXME"); return 0; }
+STATIC WINAPI BOOL CryptCATCatalogInfoFromContext(VOID) { DebugLog("FIXME"); return 0; }
+STATIC WINAPI BOOL WTHelperGetProvCertFromChain(VOID) { DebugLog("FIXME"); return 0; }
+STATIC WINAPI BOOL WTHelperGetProvSignerFromChain(VOID) { DebugLog("FIXME"); return 0; }
+STATIC WINAPI BOOL WTHelperProvDataFromStateData(VOID) { DebugLog("FIXME"); return 0; }
+STATIC WINAPI BOOL WinVerifyTrust(VOID) { DebugLog("FIXME"); return 0; }
 
 DECLARE_CRT_EXPORT("CryptCATAdminAcquireContext", CryptCATAdminAcquireContext);
 DECLARE_CRT_EXPORT("CryptCATAdminCalcHashFromFileHandle", CryptCATAdminCalcHashFromFileHandle);

@@ -42,19 +42,19 @@ static VOID WINAPI CloseThreadpoolTimer(PVOID pti)
     DebugLog("%p", pti);
 }
 
-static LONG InterlockedDecrement(PULONG Addend)
+static LONG WINAPI InterlockedDecrement(PULONG Addend)
 {
     DebugLog("%p", Addend);
     return --*Addend;
 }
 
-static LONG InterlockedIncrement(PULONG Addend)
+static LONG WINAPI InterlockedIncrement(PULONG Addend)
 {
     DebugLog("%p", Addend);
     return ++*Addend;
 }
 
-static LONG InterlockedCompareExchange(PULONG Destination, LONG Exchange, LONG Comparand)
+static LONG WINAPI InterlockedCompareExchange(PULONG Destination, LONG Exchange, LONG Comparand)
 {
     DebugLog("%p", Destination);
     if (*Destination == Comparand) {
