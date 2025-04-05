@@ -133,12 +133,22 @@ static BOOL WINAPI GetModuleHandleExW(DWORD dwFlags,
     DebugLog("%p flags: %x", lpModuleName, dwFlags);
     DebugLog("This is probably not handled correctly...");
     if (dwFlags & 4){ // GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
-//        if ((int)lpModuleName & 0x75a000000 == 0x75a000000){
+	DebugLog("GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS");
+    	uintptr_t ptr_val=(uintptr_t)lpModuleName;
+	DebugLog("%llx, %llx", ptr_val, ptr_val & 0x75a000000);
+        if ((ptr_val & 0x75a000000) == 0x75a000000){
             *phModule = (HANDLE) 'MPEN';
             return true;
-//        }
+        }else{
+	    DebugLog("Can't resolve address: %p", lpModuleName);
+	    exit(1);
+	}
     }else{
-        DebugLog("%s", lpModuleName);
+	char a_name[300];
+	for (int i=0; lpModuleName[i*2]!=0 && i < 150; i++){
+	  a_name[i]=(char*)lpModuleName[i*2];
+	}
+	return GetModuleHandleExA(dwFlags, a_name, phModule);
     }
     *phModule = (HANDLE) NULL;
     return true;

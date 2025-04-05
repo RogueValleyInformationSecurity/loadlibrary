@@ -110,7 +110,9 @@ WideCharToMultiByte(UINT CodePage, DWORD dwFlags, PVOID lpWideCharStr, int cchWi
 STATIC BOOL WINAPI GetStringTypeA(DWORD locale, DWORD dwInfoType, PUSHORT lpSrcStr, int cchSrc, PUSHORT lpCharType) {
     DebugLog("%u, %u, %p, %d, %p", locale, dwInfoType, lpSrcStr, cchSrc, lpCharType);
 
-    memset(lpCharType, 1, cchSrc * sizeof(USHORT));
+    if (cchSrc>0) 
+	    memset(lpCharType, 1, cchSrc * sizeof(USHORT));
+    else exit(1);
 
     return FALSE;
 }
@@ -119,7 +121,9 @@ STATIC BOOL WINAPI GetStringTypeExA(DWORD locale, DWORD dwInfoType, PUSHORT lpSr
 {
     DebugLog("%u, %u, %p, %d, %p", locale, dwInfoType, lpSrcStr, cchSrc, lpCharType);
 
-    memset(lpCharType, 1, cchSrc * sizeof(USHORT));
+    if (cchSrc>0) 
+    	memset(lpCharType, 1, cchSrc * sizeof(USHORT));
+    else exit(1);
 
     return TRUE;
 }
@@ -128,7 +132,9 @@ STATIC BOOL WINAPI GetStringTypeExA(DWORD locale, DWORD dwInfoType, PUSHORT lpSr
 STATIC BOOL WINAPI GetStringTypeW(DWORD dwInfoType, PUSHORT lpSrcStr, int cchSrc, PUSHORT lpCharType) {
     DebugLog("%u, %p, %d, %p", dwInfoType, lpSrcStr, cchSrc, lpCharType);
 
-    memset(lpCharType, 1, cchSrc * sizeof(USHORT));
+    if (cchSrc>0) 
+    	memset(lpCharType, 1, cchSrc * sizeof(USHORT));
+    else exit(1);
 
     return FALSE;
 }
@@ -137,7 +143,9 @@ STATIC BOOL WINAPI GetStringTypeExW(DWORD locale, DWORD dwInfoType, PUSHORT lpSr
 {
     DebugLog("%u, %p, %d, %p", dwInfoType, lpSrcStr, cchSrc, lpCharType);
 
-    memset(lpCharType, 1, cchSrc * sizeof(USHORT));
+    if (cchSrc>0) 
+    	memset(lpCharType, 1, cchSrc * sizeof(USHORT));
+    else exit(1);
 
     return TRUE;
 }

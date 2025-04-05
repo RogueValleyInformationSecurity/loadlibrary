@@ -24,42 +24,42 @@ CryptCATAdminEnumCatalogFromHash(HANDLE hCatAdmin, BYTE *pbHash, DWORD cbHash, D
     return NULL;
 }
 
-STATIC BOOL CryptCATAdminCalcHashFromFileHandle(VOID) {
+STATIC WINAPI BOOL CryptCATAdminCalcHashFromFileHandle(VOID) {
     DebugLog("FIXME");
     return 0;
 }
 
-STATIC BOOL CryptCATAdminReleaseCatalogContext(VOID) {
+STATIC WINAPI BOOL CryptCATAdminReleaseCatalogContext(VOID) {
     DebugLog("FIXME");
     return 0;
 }
 
-STATIC BOOL CryptCATAdminReleaseContext(VOID) {
+STATIC WINAPI BOOL CryptCATAdminReleaseContext(VOID) {
     DebugLog("FIXME");
     return 0;
 }
 
-STATIC BOOL CryptCATCatalogInfoFromContext(VOID) {
+STATIC WINAPI BOOL CryptCATCatalogInfoFromContext(VOID) {
     DebugLog("FIXME");
     return 0;
 }
 
-STATIC BOOL WTHelperGetProvCertFromChain(VOID) {
+STATIC WINAPI BOOL WTHelperGetProvCertFromChain(VOID) {
     DebugLog("FIXME");
     return 0;
 }
 
-STATIC BOOL WTHelperGetProvSignerFromChain(VOID) {
+STATIC WINAPI BOOL WTHelperGetProvSignerFromChain(VOID) {
     DebugLog("FIXME");
     return 0;
 }
 
-STATIC BOOL WTHelperProvDataFromStateData(VOID) {
+STATIC WINAPI BOOL WTHelperProvDataFromStateData(VOID) {
     DebugLog("FIXME");
     return 0;
 }
 
-STATIC BOOL WinVerifyTrust(VOID) {
+STATIC WINAPI BOOL WinVerifyTrust(VOID) {
     DebugLog("FIXME");
     return 0;
 }

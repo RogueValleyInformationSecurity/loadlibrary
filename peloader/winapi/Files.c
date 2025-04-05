@@ -297,7 +297,7 @@ static BOOL WINAPI DeviceIoControl(
     return FALSE;
 }
 
-static NTSTATUS NtQueryVolumeInformationFile(
+static NTSTATUS WINAPI NtQueryVolumeInformationFile(
         HANDLE FileHandle,
         PVOID IoStatusBlock,
         PVOID FsInformation,
@@ -316,7 +316,7 @@ static DWORD WINAPI GetFullPathNameW(
     return 0;
 }
 
-static BOOL SetEndOfFile(HANDLE hFile) {
+static BOOL WINAPI SetEndOfFile(HANDLE hFile) {
     DebugLog("");
     return ftruncate(fileno(hFile), ftell(hFile)) != -1;
 }
