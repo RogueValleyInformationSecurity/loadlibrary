@@ -69,17 +69,21 @@ STATIC DWORD WINAPI ExpandEnvironmentStringsW(PWCHAR lpSrc, PWCHAR lpDst, DWORD 
             {"%AllUsersProfile%",           L"C:\\ProgramData"},
             {"%PATH%",                      L"C:\\Path"},
             {"%windir%",                    L"C:\\Windows"},
+            {"%WINDIR%",                    L"C:\\Windows"},
+            {"%systemroot%",                    L"C:\\Windows"},
+            {"%SYSTEMROOT%",                    L"C:\\Windows"},
             {"%ProgramFiles(x86)%",         L"C:\\Program Files"},
             {"%WINDIR%\\system32\\drivers", L"C:\\WINDOWS\\system32\\drivers"},
             {"%windir%\\temp",              L"C:\\WINDOWS\\temp"},
             {"%CommonProgramFiles%",        L"C:\\CommonProgramFiles"},
+            {"%ProgramData%",        L"C:\\ProgramData"},
             {NULL},
     };
 
     DebugLog("%p [%s], %p, %u", lpSrc, AnsiString, lpDst, nSize);
 
     for (int i = 0; KnownPaths[i].Src; i++) {
-        if (strcmp(AnsiString, KnownPaths[i].Src) == 0) {
+        if (strncmp(AnsiString, KnownPaths[i].Src, strlen(KnownPaths[i].Src)) == 0) {
             Result = CountWideChars(KnownPaths[i].Dst) + 1;
             if (nSize < Result) {
                 goto finish;
