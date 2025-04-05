@@ -915,6 +915,20 @@ BOOL RtlUnwindEx(
                       UNW_FLAG_UHANDLER);
 }
 
+
+STATIC WINAPI void RtlUnwind(PEXCEPTION_FRAME TargetFrame, PVOID TargetIp, PEXCEPTION_RECORD ExceptionRecord, PVOID ReturnValue)
+{
+    CONTEXT Context;
+ 
+    RtlUnwindEx(TargetFrame,
+                TargetIp,
+                ExceptionRecord,
+                ReturnValue,
+                &Context,
+                NULL);
+    return;
+}
+
 STATIC WINAPI
 
 BOOL __attribute__ ((noinline, section ("RtlDispatchExceptionSection")))
@@ -1144,10 +1158,9 @@ VOID DumpExceptionChain(VOID) {
 
 #endif
 
-STATIC WINAPI
-
-void RtlUnwind(PEXCEPTION_FRAME TargetFrame, PVOID TargetIp, PEXCEPTION_RECORD ExceptionRecord, PVOID ReturnValue)
+STATIC WINAPI void RtlUnwind(PEXCEPTION_FRAME TargetFrame, PVOID TargetIp, PEXCEPTION_RECORD ExceptionRecord, PVOID ReturnValue)
 {
+ 
     PEXCEPTION_FRAME ExceptionList;
     DWORD Depth;
     ucontext_t Context;
@@ -1274,9 +1287,6 @@ PVOID RaiseException(DWORD dwExceptionCode, DWORD dwExceptionFlags, DWORD nNumbe
 
 DECLARE_CRT_EXPORT("RaiseException", RaiseException);
 
-#ifdef __x86_64__
 DECLARE_CRT_EXPORT("RtlUnwindEx", RtlUnwindEx);
 DECLARE_CRT_EXPORT("RtlPcToFileHeader", RtlPcToFileHeader);
-#else
 DECLARE_CRT_EXPORT("RtlUnwind", RtlUnwind);
-#endif
