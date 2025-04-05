@@ -141,6 +141,8 @@ static BOOL WINAPI GetModuleHandleExW(DWORD dwFlags,
             return true;
         }else{
 	    DebugLog("Can't resolve address: %p", lpModuleName);
+            *phModule = (HANDLE) 'LOAD';
+            return true;
 	    exit(1);
 	}
     }else{
