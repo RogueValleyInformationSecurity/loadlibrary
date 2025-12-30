@@ -6,8 +6,7 @@
 // coverage-guided fuzzing of Windows DLLs via loadlibrary.
 //
 // Usage:
-//   afl-fuzz -i corpus -o findings -- \
-//     ./coverage/pin -t coverage/afl_deepcover.so -- ./harness target.dll
+//   afl-fuzz -i corpus -o findings -- ./coverage/pin -t coverage/afl_deepcover.so -- ./harness target.dll
 //
 // Environment:
 //   __AFL_SHM_ID is set automatically by afl-fuzz

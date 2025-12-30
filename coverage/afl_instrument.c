@@ -10,16 +10,46 @@
 //   AFL_MAP_SIZE - Optional custom map size (default 65536)
 //
 // Usage:
-//   afl-fuzz -i corpus -o findings -- \
-//     ./coverage/pin -t coverage/afl_deepcover.so -- ./harness target.dll
+//   afl-fuzz -i corpus -o findings -- ./coverage/pin -t coverage/afl_deepcover.so -- ./harness target.dll
 //
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/shm.h>
 #include <sys/types.h>
+
+// Use direct syscalls for shared memory since PIN CRT doesn't provide shmat/shmdt
+#include <sys/syscall.h>
+#include <unistd.h>
+
+// On 32-bit x86, shmat/shmdt are accessed via the ipc() multiplexer syscall
+// On 64-bit x86, they are direct syscalls
+#ifdef __i386__
+    // IPC command codes for 32-bit
+    #define SHMAT_CMD  21
+    #define SHMDT_CMD  22
+
+    static inline void *pin_shmat(int shmid, const void *shmaddr, int shmflg) {
+        // On 32-bit, use ipc syscall: ipc(SHMAT, shmid, shmflg, &raddr, shmaddr)
+        void *raddr = NULL;
+        long ret = syscall(__NR_ipc, SHMAT_CMD, shmid, shmflg, &raddr, shmaddr);
+        if (ret == 0) return raddr;
+        return (void *)-1;
+    }
+
+    static inline int pin_shmdt(const void *shmaddr) {
+        return syscall(__NR_ipc, SHMDT_CMD, 0, 0, 0, shmaddr);
+    }
+#else
+    static inline void *pin_shmat(int shmid, const void *shmaddr, int shmflg) {
+        return (void *)syscall(__NR_shmat, shmid, shmaddr, shmflg);
+    }
+
+    static inline int pin_shmdt(const void *shmaddr) {
+        return syscall(__NR_shmdt, shmaddr);
+    }
+#endif
 
 #include "afl_instrument.h"
 
@@ -33,7 +63,10 @@ static uint8_t *afl_area_ptr = NULL;
 static uint32_t afl_map_size = AFL_DEFAULT_MAP_SIZE;
 
 // Previous location for edge coverage calculation
-static __thread uint32_t afl_prev_loc = 0;
+// Note: Not using __thread because PIN CRT doesn't support TLS relocations
+// This means multi-threaded targets may have race conditions in coverage,
+// but for single-threaded fuzzing this is fine
+static uint32_t afl_prev_loc = 0;
 
 // Fallback local bitmap when not running under AFL
 static uint8_t afl_local_map[AFL_DEFAULT_MAP_SIZE];
@@ -62,7 +95,7 @@ int afl_setup_shm(void)
     if (shm_id_str) {
         // Running under AFL - attach to shared memory
         int shm_id = atoi(shm_id_str);
-        afl_area_ptr = (uint8_t *)shmat(shm_id, NULL, 0);
+        afl_area_ptr = (uint8_t *)pin_shmat(shm_id, NULL, 0);
 
         if (afl_area_ptr == (void *)-1) {
             fprintf(stderr, "[AFL-PIN] Failed to attach to shared memory %d\n", shm_id);
@@ -159,7 +192,7 @@ VOID afl_fini_callback(INT32 code, VOID *v)
 
     // Detach from shared memory if attached
     if (afl_area_ptr && afl_area_ptr != afl_local_map) {
-        shmdt(afl_area_ptr);
+        pin_shmdt(afl_area_ptr);
     }
 }
 
