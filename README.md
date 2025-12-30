@@ -235,6 +235,219 @@ native Linux code to load simple Windows DLLs.
 
 The closest analogy would be ndiswrapper but for userspace.
 
+## Building Fuzzing Harnesses
+
+The primary use case for loadlibrary is fuzzing Windows DLLs on Linux using
+tools like AFL, libFuzzer, or honggfuzz. Here's how to create fuzzing harnesses.
+
+### Prerequisites
+
+For 32-bit DLLs:
+```bash
+# Fedora/RedHat
+dnf install gcc-mingw-w64-i686
+
+# Ubuntu/Debian
+apt install gcc-mingw-w64-i686
+```
+
+For 64-bit DLLs:
+```bash
+# Fedora/RedHat
+dnf install gcc-mingw-w64-x86-64
+
+# Ubuntu/Debian
+apt install gcc-mingw-w64-x86-64
+```
+
+### Simple 64-bit Example
+
+This example shows the minimal code needed to fuzz a 64-bit Windows DLL.
+
+**Step 1: Create a test DLL (`test/fuzz64.c`):**
+
+```c
+#include <stdint.h>
+
+#define EXPORT __declspec(dllexport)
+
+// Function that processes input data (the fuzzing target)
+EXPORT int parse_records(const uint8_t *data, int size) {
+    int count = 0, i = 0;
+    while (i < size) {
+        uint8_t record_len = data[i];
+        if (i + 1 + record_len > size) return -1;  // Truncated
+        i += 1 + record_len;
+        count++;
+    }
+    return count;
+}
+
+EXPORT int __stdcall DllMain(void *h, uint32_t reason, void *r) {
+    return 1;
+}
+
+int __stdcall _DllMainCRTStartup(void *h, uint32_t reason, void *r) {
+    return DllMain(h, reason, r);
+}
+```
+
+**Step 2: Compile the DLL (no CRT dependencies):**
+```bash
+x86_64-w64-mingw32-gcc -shared -nostdlib -e _DllMainCRTStartup \
+    -o test/fuzz64.dll test/fuzz64.c
+```
+
+**Step 3: Create the harness (`examples/harness64.c`):**
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <unistd.h>
+
+#include "winnt_types.h"
+#include "pe_linker.h"
+#include "ntoskernel.h"
+
+// WINCALL ensures correct calling convention (ms_abi on x64)
+typedef int (WINCALL *parse_records_fn)(const uint8_t *data, int size);
+
+#define MAX_INPUT_SIZE (1024 * 1024)
+
+int main(int argc, char *argv[]) {
+    const char *dll_path = "test/fuzz64.dll";
+    void *image = NULL;
+    size_t size = 0;
+    struct pe_image pe;
+
+    if (argc > 1) dll_path = argv[1];
+
+    // Load and link the DLL
+    if (!pe_load_library(dll_path, &image, &size)) return 1;
+    memset(&pe, 0, sizeof(pe));
+    strncpy(pe.name, dll_path, sizeof(pe.name) - 1);
+    pe.image = image;
+    pe.size = size;
+    if (link_pe_images(&pe, 1) != 0) return 1;
+
+    // Initialize the DLL
+    if (pe.entry) pe.entry(pe.image, DLL_PROCESS_ATTACH, NULL);
+
+    // Get the target function
+    parse_records_fn parse_records = get_export_address("parse_records");
+    if (!parse_records) return 1;
+
+    // Read input from stdin (AFL-compatible)
+    uint8_t *input = malloc(MAX_INPUT_SIZE);
+    ssize_t input_size = read(STDIN_FILENO, input, MAX_INPUT_SIZE);
+    if (input_size <= 0) return 1;
+
+    // Call the target function
+    parse_records(input, (int)input_size);
+
+    free(input);
+    return 0;
+}
+```
+
+**Step 4: Build and run:**
+```bash
+make harness64
+echo -e '\x03abc\x02de' | ./harness64
+```
+
+**Step 5: Fuzz with AFL:**
+```bash
+mkdir -p corpus findings
+echo -e '\x03abc' > corpus/seed.bin
+afl-fuzz -i corpus -o findings -- ./harness64
+```
+
+### Simple 32-bit Example
+
+The 32-bit version is similar, but simpler because calling conventions are
+compatible between Linux and Windows on x86.
+
+**Compile the DLL:**
+```bash
+i686-w64-mingw32-gcc -shared -nostdlib -e __DllMainCRTStartup \
+    -o test/fuzz32.dll test/fuzz32.c
+```
+
+**Build the harness:**
+```bash
+make harness32
+echo -e '\x03abc' | ./harness32
+```
+
+Key differences from 64-bit:
+- No `WINCALL` attribute needed (calling conventions match)
+- Use 32-bit libraries (`libc6-dev:i386`, `gcc-multilib`)
+
+### Complex Example: mpclient (Windows Defender)
+
+The `mpclient` harness demonstrates a real-world fuzzing scenario with a
+complex 32-bit Windows DLL (Microsoft's mpengine.dll).
+
+**Key patterns from mpclient:**
+
+1. **Stream-based input** - Uses callbacks for reading data:
+```c
+static DWORD ReadStream(PVOID this, ULONGLONG Offset, PVOID Buffer,
+                        DWORD Size, PDWORD SizeRead) {
+    fseek(this, Offset, SEEK_SET);
+    *SizeRead = fread(Buffer, 1, Size, this);
+    return TRUE;
+}
+
+ScanDescriptor.Read    = ReadStream;
+ScanDescriptor.GetSize = GetStreamSize;
+ScanDescriptor.GetName = GetStreamName;
+```
+
+2. **Exception handling** - Install a top-level handler:
+```c
+EXCEPTION_DISPOSITION ExceptionHandler(...) {
+    LogMessage("Exception caught");
+    abort();
+}
+setup_nt_threadinfo(ExceptionHandler);
+```
+
+3. **Resource limits** - Prevent runaway DLLs:
+```c
+setrlimit(RLIMIT_CPU, &(struct rlimit){3600, RLIM_INFINITY});
+setrlimit(RLIMIT_FSIZE, &(struct rlimit){0x20000000, 0x20000000});
+```
+
+4. **DLL initialization** - Call DllMain and boot routines:
+```c
+image.entry((PVOID)'MPEN', DLL_PROCESS_ATTACH, NULL);
+__rsignal(&KernelHandle, RSIG_BOOTENGINE, &BootParams, sizeof BootParams);
+```
+
+5. **Scanning loop** - Process each input file:
+```c
+for (++argv; *argv; ++argv) {
+    ScanDescriptor.UserPtr = fopen(*argv, "r");
+    __rsignal(&KernelHandle, RSIG_SCAN_STREAMBUFFER, &ScanParams, sizeof ScanParams);
+    fclose(ScanDescriptor.UserPtr);
+}
+```
+
+See `mpclient.c` for the complete implementation.
+
+### Tips for Effective Fuzzing
+
+1. **Use persistent mode** for faster fuzzing (if your DLL supports it)
+2. **Compile with ASAN** (`-fsanitize=address`) to detect memory bugs
+3. **Use coverage guidance** - AFL and libFuzzer both support this
+4. **Create good seed inputs** - Start with valid files for the format
+5. **Monitor for hangs** - Set appropriate timeouts
+
 ## Further Examples
 
 * [avscript](https://github.com/taviso/avscript) - Loading another antivirus engine, demonstrates hooking and patching.

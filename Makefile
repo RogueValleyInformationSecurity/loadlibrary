@@ -13,7 +13,7 @@ CFLAGS64  = $(COMMON_CFLAGS) -m64
 LDFLAGS64 = $(CFLAGS64) -m64 -lm -Wl,--dynamic-list=exports.lst
 LDLIBS64  = -Wl,--whole-archive,peloader/libpeloader64.a,--no-whole-archive
 
-.PHONY: clean peloader peloader64 intercept test64
+.PHONY: clean peloader peloader64 intercept test64 harness32 harness64 examples
 
 TARGETS=mpclient | peloader
 
@@ -43,8 +43,26 @@ test64: test/test64_client.64.o | peloader64
 test/test64_client.64.o: test/test64_client.c
 	$(CC) $(CFLAGS64) $(CPPFLAGS) -c -o $@ $<
 
+# Example fuzzing harnesses (don't need intercept library)
+LDLIBS_HARNESS = -Wl,--whole-archive,peloader/libpeloader.a,--no-whole-archive
+LDLIBS_HARNESS64 = -Wl,--whole-archive,peloader/libpeloader64.a,--no-whole-archive
+
+examples: harness32 harness64
+
+harness32: examples/harness32.o | peloader
+	$(CC) $(CFLAGS) $^ -o $@ $(LDLIBS_HARNESS) $(LDFLAGS)
+
+examples/harness32.o: examples/harness32.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
+harness64: examples/harness64.64.o | peloader64
+	$(CC) $(CFLAGS64) $^ -o $@ $(LDLIBS_HARNESS64) $(LDFLAGS64)
+
+examples/harness64.64.o: examples/harness64.c
+	$(CC) $(CFLAGS64) $(CPPFLAGS) -c -o $@ $<
+
 clean:
-	rm -f a.out core *.o *.d core.* vgcore.* gmon.out mpclient test64 test/*.o
+	rm -f a.out core *.o *.d core.* vgcore.* gmon.out mpclient test64 harness32 harness64 test/*.o examples/*.o
 	make -C intercept clean
 	make -C peloader clean
 	rm -rf faketemp
