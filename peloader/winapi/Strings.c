@@ -93,9 +93,10 @@ STATIC int WINAPI WideCharToMultiByte(UINT CodePage, DWORD dwFlags, PVOID lpWide
     DebugLog("cchWideChar == %d, Ansi: [%s]", cchWideChar, ansi);
 
     if (lpMultiByteStr && strlen(ansi) < cbMultiByte) {
-        strcpy(lpMultiByteStr, ansi);
+        size_t len = strlen(ansi) + 1;
+        memcpy(lpMultiByteStr, ansi, len);
         free(ansi);
-        return strlen(lpMultiByteStr) + 1;
+        return len;
     } else if (!lpMultiByteStr && cbMultiByte == 0) {
         int len = strlen(ansi) + 1;
         free(ansi);

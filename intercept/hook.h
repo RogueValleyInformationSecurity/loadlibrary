@@ -44,17 +44,17 @@ struct __attribute__((packed)) encodedsize {
     uint16_t    operand;
 };
 
-static int __stub_zero() { return  0; }
-static int __stub_one()  { return  1; }
-static int __stub_false(){ return  false; }
-static int __stub_true() { return  true; }
-static int __stub_neg()  { return -1; }
+static int __attribute__((unused)) __stub_zero() { return  0; }
+static int __attribute__((unused)) __stub_one()  { return  1; }
+static int __attribute__((unused)) __stub_false(){ return  false; }
+static int __attribute__((unused)) __stub_true() { return  true; }
+static int __attribute__((unused)) __stub_neg()  { return -1; }
 
 // Callee clears stubs, common on Windows.
-static int __attribute__((stdcall)) __stub_zero_std_4(int a) { return 0; }
-static int __attribute__((stdcall)) __stub_zero_std_8(int a, int b) { return 0; }
-static int __attribute__((stdcall)) __stub_zero_std_12(int a, int b, int c) { return 0; }
-static int __attribute__((stdcall)) __stub_zero_std_16(int a, int b, int c, int d) { return 0; }
+static int __attribute__((stdcall, unused)) __stub_zero_std_4(int a __attribute__((unused))) { return 0; }
+static int __attribute__((stdcall, unused)) __stub_zero_std_8(int a __attribute__((unused)), int b __attribute__((unused))) { return 0; }
+static int __attribute__((stdcall, unused)) __stub_zero_std_12(int a __attribute__((unused)), int b __attribute__((unused)), int c __attribute__((unused))) { return 0; }
+static int __attribute__((stdcall, unused)) __stub_zero_std_16(int a __attribute__((unused)), int b __attribute__((unused)), int c __attribute__((unused)), int d __attribute__((unused))) { return 0; }
 
 // This allows you to call stubs like __stub_zero_std(4) to specify how many bytes to clear.
 #define __stub_zero_std(n) __stub_zero_std_ ## n
