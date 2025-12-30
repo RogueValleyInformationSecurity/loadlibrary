@@ -117,6 +117,7 @@ int get_data_export(char *name, uint32_t base, void *result)
     *hack += base - 0x3000;
 
     ERROR("THIS WAS A TEMPORARY HACK DO NOT CALL WITHOUT FIXING");
+    return 0;
 }
 
 void * get_export_address(const char *name)
@@ -457,7 +458,7 @@ static int fix_pe_image(struct pe_image *pe)
         void *image;
         IMAGE_SECTION_HEADER *sect_hdr;
         int i, sections;
-        int image_size;
+        size_t image_size;
 
         if (pe->size == pe->opt_hdr->SizeOfImage) {
                 /* Nothing to do */
@@ -476,7 +477,7 @@ static int fix_pe_image(struct pe_image *pe)
                           0);
 
         if (image == MAP_FAILED) {
-                ERROR("failed to mmap desired space for image: %d bytes, image base %#x, %m",
+                ERROR("failed to mmap desired space for image: %zu bytes, image base %#x, %m",
                     image_size, pe->opt_hdr->ImageBase);
                 return -ENOMEM;
         }
@@ -538,7 +539,7 @@ int link_pe_images(struct pe_image *pe_image, unsigned short n)
                 dos_hdr = pe->image;
 
                 if (pe->size < sizeof(IMAGE_DOS_HEADER)) {
-                        TRACE1("image too small: %d", pe->size);
+                        TRACE1("image too small: %zu", pe->size);
                         return -EINVAL;
                 }
 

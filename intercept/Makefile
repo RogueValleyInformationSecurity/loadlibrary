@@ -1,4 +1,4 @@
-CFLAGS	= -O0 -ggdb3 -m32 -std=gnu99 -fshort-wchar -Wno-multichar -w
+CFLAGS	= -O0 -ggdb3 -m32 -std=gnu99 -fshort-wchar -Wall -Wextra -Wno-multichar
 CPPFLAGS= -DNDEBUG
 LDFLAGS	= $(CFLAGS) -m32
 

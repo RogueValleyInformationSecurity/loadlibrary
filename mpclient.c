@@ -105,20 +105,21 @@ static DWORD GetStreamSize(PVOID this, PULONGLONG FileSize)
     return TRUE;
 }
 
-static PWCHAR GetStreamName(PVOID this)
+static PWCHAR GetStreamName(PVOID this __attribute__((unused)))
 {
     return L"input";
 }
 
 // These are available for pintool.
-BOOL __noinline InstrumentationCallback(PVOID ImageStart, SIZE_T ImageSize)
+BOOL __noinline InstrumentationCallback(PVOID ImageStart __attribute__((unused)),
+                                        SIZE_T ImageSize __attribute__((unused)))
 {
     // Prevent the call from being optimized away.
     asm volatile ("");
     return TRUE;
 }
 
-int main(int argc, char **argv, char **envp)
+int main(int argc, char **argv, char **envp __attribute__((unused)))
 {
     PIMAGE_DOS_HEADER DosHeader;
     PIMAGE_NT_HEADERS PeHeader;
@@ -173,10 +174,10 @@ int main(int argc, char **argv, char **envp)
         errx(EXIT_FAILURE, "Failed to resolve mpengine entrypoint");
     }
 
-    EXCEPTION_DISPOSITION ExceptionHandler(struct _EXCEPTION_RECORD *ExceptionRecord,
-            struct _EXCEPTION_FRAME *EstablisherFrame,
-            struct _CONTEXT *ContextRecord,
-            struct _EXCEPTION_FRAME **DispatcherContext)
+    EXCEPTION_DISPOSITION ExceptionHandler(struct _EXCEPTION_RECORD *ExceptionRecord __attribute__((unused)),
+            struct _EXCEPTION_FRAME *EstablisherFrame __attribute__((unused)),
+            struct _CONTEXT *ContextRecord __attribute__((unused)),
+            struct _EXCEPTION_FRAME **DispatcherContext __attribute__((unused)))
     {
         LogMessage("Toplevel Exception Handler Caught Exception");
         abort();
@@ -247,7 +248,7 @@ int main(int argc, char **argv, char **envp)
     // Enable Instrumentation.
     InstrumentationCallback(image.image, image.size);
 
-    for (char *filename = *++argv; *argv; ++argv) {
+    for (++argv; *argv; ++argv) {
         ScanDescriptor.UserPtr = fopen(*argv, "r");
 
         if (ScanDescriptor.UserPtr == NULL) {

@@ -290,9 +290,9 @@ bool redirect_call_within_function(void *function, void *target, void *redirect)
             // Examine the instuction found to see if it matches the call we
             // want to replace.
             if (insn.type == insn_call) {
-                if (x86_get_rel_offset(&insn) == (uintptr_t)(target)
-                                               - (uintptr_t)(function + offset)
-                                               - (uintptr_t)(insnlength)) {
+                if ((uintptr_t)x86_get_rel_offset(&insn) == (uintptr_t)(target)
+                                                          - (uintptr_t)(function + offset)
+                                                          - (uintptr_t)(insnlength)) {
                     // Success, this is the location the caller wants us to patch.
                     callsite = (struct branch *)(function + offset);
 

@@ -1,4 +1,4 @@
-CFLAGS=-O2 -ggdb3 -m32 -std=gnu99 -fshort-wchar -Wno-multichar -w -DHAVE_CONFIG_H -I.
+CFLAGS=-O2 -ggdb3 -m32 -std=gnu99 -fshort-wchar -Wall -Wextra -Wno-multichar -DHAVE_CONFIG_H -I.
 LDFLAGS= $(CFLAGS) -m32
 
 all: libdisasm.a
