@@ -323,6 +323,10 @@ static int read_exports(struct pe_image *pe)
                                       export_dir_table->AddressOfNameOrdinals);
 
         pe_exports = calloc(export_dir_table->NumberOfNames, sizeof(struct pe_exports));
+        if (!pe_exports) {
+                ERROR("failed to allocate exports table");
+                return -ENOMEM;
+        }
         num_pe_exports = 0;
 
         for (i = 0; i < export_dir_table->NumberOfNames; i++) {
