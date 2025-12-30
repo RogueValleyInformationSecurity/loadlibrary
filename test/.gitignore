@@ -7,5 +7,7 @@
 !test64_client.c
 !fuzz32.c
 !fuzz64.c
+!afl_persistent.c
+!afl_persistent64.c
 *.txt
 *.o

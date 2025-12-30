@@ -442,11 +442,78 @@ See `mpclient.c` for the complete implementation.
 
 ### Tips for Effective Fuzzing
 
-1. **Use persistent mode** for faster fuzzing (if your DLL supports it)
+1. **Use persistent mode** for faster fuzzing (see below)
 2. **Compile with ASAN** (`-fsanitize=address`) to detect memory bugs
 3. **Use coverage guidance** - AFL and libFuzzer both support this
 4. **Create good seed inputs** - Start with valid files for the format
 5. **Monitor for hangs** - Set appropriate timeouts
+
+### AFL++ Persistent Mode
+
+AFL++ persistent mode dramatically improves fuzzing speed by keeping the
+process alive across multiple test cases instead of forking for each input.
+This can provide 10-100x speedup.
+
+**Building the persistent mode harnesses:**
+
+```bash
+# 32-bit persistent mode harness
+make CC=afl-clang-fast afl_persistent
+
+# 64-bit persistent mode harness
+make CC=afl-clang-fast afl_persistent64
+```
+
+**Running with AFL++:**
+
+```bash
+# Create seed corpus
+mkdir -p corpus
+echo "test" > corpus/seed.bin
+
+# Fuzz a 64-bit DLL
+afl-fuzz -i corpus -o findings -- ./afl_persistent64 path/to/target.dll
+
+# Fuzz a 32-bit DLL
+afl-fuzz -i corpus -o findings -- ./afl_persistent path/to/target.dll
+```
+
+**How it works:**
+
+The persistent mode harnesses use AFL++'s deferred forkserver and persistent
+loop macros:
+
+```c
+// Expensive DLL loading happens once, before forking
+if (init_target(dll_path) != 0) return 1;
+
+// Fork server starts here - child inherits loaded DLL
+__AFL_INIT();
+
+// Process 10,000 inputs per fork (configurable)
+while (__AFL_LOOP(10000)) {
+    size_t len = __AFL_FUZZ_TESTCASE_LEN;
+    fuzz_one(__AFL_FUZZ_TESTCASE_BUF, len);
+}
+```
+
+**Performance comparison:**
+
+| Mode | Typical Speed |
+|------|---------------|
+| Fork-per-input | 500-2,000 exec/sec |
+| Persistent mode | 15,000-35,000 exec/sec |
+
+**Note on coverage:** The persistent mode harnesses instrument the Linux
+harness code, not the Windows DLL. For coverage-guided fuzzing of the DLL
+itself, consider:
+
+- **Intel PIN** - Use `coverage/deepcover.cpp` for offline corpus distillation
+- **AFL++ Frida mode** (`-O` flag) - Runtime instrumentation, slower but covers DLL code
+- **Intel PT** - Hardware tracing on supported CPUs
+
+See `test/afl_persistent.c` and `test/afl_persistent64.c` for the full
+implementation.
 
 ## Further Examples
 
