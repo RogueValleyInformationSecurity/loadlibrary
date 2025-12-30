@@ -1,14 +1,16 @@
-# Common flags
-COMMON_CFLAGS = -O3 -march=native -ggdb3 -std=gnu99 -fshort-wchar -Wall -Wextra -Wno-multichar -Iinclude
+# Common flags (no -march here, set per-architecture below)
+COMMON_CFLAGS = -O3 -ggdb3 -std=gnu99 -fshort-wchar -Wall -Wextra -Wno-multichar -Iinclude
 COMMON_CFLAGS += -MMD -MP -fstack-protector-strong
 CPPFLAGS=-DNDEBUG -D_GNU_SOURCE -D_FORTIFY_SOURCE=2 -I.
 
 # 32-bit flags (default)
-CFLAGS  = $(COMMON_CFLAGS) -m32 -mstackrealign
+# Use -march=i686 for QEMU compatibility (avoid AVX/SSE4 from -march=native)
+CFLAGS  = $(COMMON_CFLAGS) -m32 -march=i686 -mtune=generic -mstackrealign
 LDFLAGS = $(CFLAGS) -m32 -lm
 
 # 64-bit flags
-CFLAGS64 = $(COMMON_CFLAGS) -m64
+# Use -march=x86-64 for QEMU compatibility (baseline x86-64 without AVX)
+CFLAGS64 = $(COMMON_CFLAGS) -m64 -march=x86-64 -mtune=generic
 LDFLAGS64 = $(CFLAGS64) -m64 -lm
 
 .PHONY: clean all64
