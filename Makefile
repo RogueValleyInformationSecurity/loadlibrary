@@ -15,7 +15,7 @@ CFLAGS64  = $(COMMON_CFLAGS) -m64 -march=x86-64 -mtune=generic
 LDFLAGS64 = $(CFLAGS64) -m64 -lm -Wl,--dynamic-list=exports.lst
 LDLIBS64  = -Wl,--whole-archive,peloader/libpeloader64.a,--no-whole-archive
 
-.PHONY: clean peloader peloader64 intercept test64 harness32 harness64 examples
+.PHONY: clean peloader peloader64 intercept test64 harness32 harness64 examples afl_persistent afl_persistent64
 
 TARGETS=mpclient | peloader
 
@@ -51,6 +51,22 @@ LDLIBS_HARNESS64 = -Wl,--whole-archive,peloader/libpeloader64.a,--no-whole-archi
 
 examples: harness32 harness64
 
+# AFL persistent mode harness
+# Build with: make afl_persistent
+# For best results: make CC=afl-clang-fast afl_persistent
+afl_persistent: test/afl_persistent.o | peloader
+	$(CC) $(CFLAGS) $^ -o $@ $(LDLIBS_HARNESS) $(LDFLAGS)
+
+test/afl_persistent.o: test/afl_persistent.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
+# 64-bit AFL persistent mode harness
+afl_persistent64: test/afl_persistent64.64.o | peloader64
+	$(CC) $(CFLAGS64) $^ -o $@ $(LDLIBS_HARNESS64) $(LDFLAGS64)
+
+test/afl_persistent64.64.o: test/afl_persistent64.c
+	$(CC) $(CFLAGS64) $(CPPFLAGS) -c -o $@ $<
+
 harness32: examples/harness32.o | peloader
 	$(CC) $(CFLAGS) $^ -o $@ $(LDLIBS_HARNESS) $(LDFLAGS)
 
@@ -64,7 +80,7 @@ examples/harness64.64.o: examples/harness64.c
 	$(CC) $(CFLAGS64) $(CPPFLAGS) -c -o $@ $<
 
 clean:
-	rm -f a.out core *.o *.d core.* vgcore.* gmon.out mpclient test64 harness32 harness64 test/*.o examples/*.o
+	rm -f a.out core *.o *.d core.* vgcore.* gmon.out mpclient test64 harness32 harness64 afl_persistent afl_persistent64 test/*.o test/*.d examples/*.o
 	make -C intercept clean
 	make -C peloader clean
 	rm -rf faketemp
