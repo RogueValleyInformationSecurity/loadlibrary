@@ -1,6 +1,7 @@
 *.o
 *.d
 *.a
+*.d
 *.sw?
 *.dll
 *.vdm
@@ -10,3 +11,4 @@ avscript
 eicar.com
 .gradle/
 .idea/
+test64

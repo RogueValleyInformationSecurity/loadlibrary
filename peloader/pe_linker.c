@@ -178,13 +178,17 @@ static void *get_dll_init(char *name)
 
 /*
  * Find and validate the coff header
- *
+ * Supports both PE32 (32-bit) and PE32+ (64-bit) images.
+ * Sets pe->is_64bit based on the detected architecture.
  */
-static int check_nt_hdr(IMAGE_NT_HEADERS *nt_hdr)
+static int check_nt_hdr(struct pe_image *pe)
 {
-        int i;
         WORD attr;
-        PIMAGE_OPTIONAL_HEADER opt_hdr;
+        WORD magic;
+        IMAGE_FILE_HEADER *file_hdr;
+
+        /* Use 32-bit header to access common fields (Signature, FileHeader) */
+        IMAGE_NT_HEADERS32 *nt_hdr = pe->nt_hdr32;
 
         /* Validate the "PE\0\0" signature */
         if (nt_hdr->Signature != IMAGE_NT_SIGNATURE) {
@@ -193,67 +197,78 @@ static int check_nt_hdr(IMAGE_NT_HEADERS *nt_hdr)
                 return -EINVAL;
         }
 
-        opt_hdr = &nt_hdr->OptionalHeader;
+        file_hdr = &nt_hdr->FileHeader;
 
-        if (opt_hdr->Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
-                ERROR("kernel is 32-bit, but Windows driver is not 32-bit;"
-                      "bad magic: %04X", opt_hdr->Magic);
+        /* Detect architecture from optional header magic */
+        magic = nt_hdr->OptionalHeader.Magic;
+
+        if (magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+                pe->is_64bit = 0;
+                pe->opt32 = &pe->nt_hdr32->OptionalHeader;
+
+                /* Validate the image for 32-bit architecture */
+                if (file_hdr->Machine != IMAGE_FILE_MACHINE_I386) {
+                        ERROR("PE32 image has wrong machine type: %04X",
+                              file_hdr->Machine);
+                        return -EINVAL;
+                }
+
+                /* 32-bit images must have 32BIT_MACHINE flag */
+                attr = IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_32BIT_MACHINE;
+                if ((file_hdr->Characteristics & attr) != attr)
+                        return -EINVAL;
+
+        } else if (magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+                pe->is_64bit = 1;
+                pe->opt64 = &pe->nt_hdr64->OptionalHeader;
+
+                /* Validate the image for 64-bit architecture */
+                if (file_hdr->Machine != IMAGE_FILE_MACHINE_AMD64) {
+                        ERROR("PE32+ image has wrong machine type: %04X",
+                              file_hdr->Machine);
+                        return -EINVAL;
+                }
+
+                /* 64-bit images only need EXECUTABLE_IMAGE */
+                attr = IMAGE_FILE_EXECUTABLE_IMAGE;
+                if ((file_hdr->Characteristics & attr) != attr)
+                        return -EINVAL;
+
+        } else {
+                ERROR("unsupported PE magic: %04X", magic);
                 return -EINVAL;
         }
-
-        /* Validate the image for the current architecture. */
-        if (nt_hdr->FileHeader.Machine != IMAGE_FILE_MACHINE_I386) {
-                ERROR("kernel is 32-bit, but Windows driver is not 32-bit;"
-                      " (PE signature is %04X)", nt_hdr->FileHeader.Machine);
-                return -EINVAL;
-        }
-
-        /* Must have attributes */
-        attr = IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_32BIT_MACHINE;
-
-        if ((nt_hdr->FileHeader.Characteristics & attr) != attr)
-                return -EINVAL;
 
         /* Must be relocatable */
         attr = IMAGE_FILE_RELOCS_STRIPPED;
-        if ((nt_hdr->FileHeader.Characteristics & attr))
+        if ((file_hdr->Characteristics & attr))
                 return -EINVAL;
 
         /* Make sure we have at least one section */
-        if (nt_hdr->FileHeader.NumberOfSections == 0)
+        if (file_hdr->NumberOfSections == 0)
                 return -EINVAL;
 
-        if (opt_hdr->SectionAlignment < opt_hdr->FileAlignment) {
+        /* Check alignment - use appropriate optional header */
+        DWORD sect_align = PE_OPT_HDR_FIELD(pe, SectionAlignment);
+        DWORD file_align = PE_OPT_HDR_FIELD(pe, FileAlignment);
+
+        if (sect_align < file_align) {
                 ERROR("alignment mismatch: section: 0x%x, file: 0x%x",
-                      opt_hdr->SectionAlignment, opt_hdr->FileAlignment);
+                      sect_align, file_align);
                 return -EINVAL;
         }
 
-#if 0
-        DBGLINKER("number of datadictionary entries %d",
-                  opt_hdr->NumberOfRvaAndSizes);
-        for (i = 0; i < opt_hdr->NumberOfRvaAndSizes; i++) {
-                DBGLINKER("datadirectory %s RVA:%X Size:%d",
-                          (i <= IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR) ?
-                          image_directory_name[i] : "unknown",
-                          opt_hdr->DataDirectory[i].VirtualAddress,
-                          opt_hdr->DataDirectory[i].Size);
-        }
-#endif
-
-        if ((nt_hdr->FileHeader.Characteristics & IMAGE_FILE_EXECUTABLE_IMAGE))
+        if ((file_hdr->Characteristics & IMAGE_FILE_EXECUTABLE_IMAGE))
                 return IMAGE_FILE_EXECUTABLE_IMAGE;
-        if ((nt_hdr->FileHeader.Characteristics & IMAGE_FILE_DLL))
+        if ((file_hdr->Characteristics & IMAGE_FILE_DLL))
                 return IMAGE_FILE_DLL;
         return -EINVAL;
 }
 
-static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll)
+static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int is_64bit)
 {
-        ULONG_PTR *lookup_tbl, *address_tbl;
         char *symname = NULL;
         int i;
-        int ret = 0;
         generic_func adr;
 
         void ordinal_import_stub(void)
@@ -268,27 +283,49 @@ static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll)
             __debugbreak();
         }
 
-        lookup_tbl = RVA2VA(image, dirent->u.OriginalFirstThunk, ULONG_PTR *);
-        address_tbl = RVA2VA(image, dirent->FirstThunk, ULONG_PTR *);
+        if (is_64bit) {
+                /* 64-bit: use IMAGE_THUNK_DATA64 */
+                ULONGLONG *lookup_tbl = RVA2VA(image, dirent->u.OriginalFirstThunk, ULONGLONG *);
+                ULONGLONG *address_tbl = RVA2VA(image, dirent->FirstThunk, ULONGLONG *);
 
-        for (i = 0; lookup_tbl[i]; i++) {
-                if (IMAGE_SNAP_BY_ORDINAL(lookup_tbl[i])) {
-                        ERROR("ordinal import not supported: %llu", (uint64_t)lookup_tbl[i]);
-                        address_tbl[i] = (ULONG) ordinal_import_stub;
-                        continue;
-                }
-                else {
-                        symname = RVA2VA(image, ((lookup_tbl[i] & ~IMAGE_ORDINAL_FLAG) + 2), char *);
-                }
+                for (i = 0; lookup_tbl[i]; i++) {
+                        if (IMAGE_SNAP_BY_ORDINAL64(lookup_tbl[i])) {
+                                ERROR("ordinal import not supported: %llu", (uint64_t)lookup_tbl[i]);
+                                address_tbl[i] = (ULONGLONG)(uintptr_t)ordinal_import_stub;
+                                continue;
+                        } else {
+                                symname = RVA2VA(image, ((lookup_tbl[i] & ~IMAGE_ORDINAL_FLAG64) + 2), char *);
+                        }
 
-                if (get_export(symname, &adr) < 0) {
-                        ERROR("unknown symbol: %s:%s", dll, symname);
-                        address_tbl[i] = (ULONG) unknown_symbol_stub;
-                        continue;
-                } else {
-                        //DBGLINKER("found symbol: %s:%s: addr: %p, rva = %llu",
-                        //          dll, symname, adr, (uint64_t)address_tbl[i]);
-                        address_tbl[i] = (ULONG_PTR)adr;
+                        if (get_export(symname, &adr) < 0) {
+                                ERROR("unknown symbol: %s:%s", dll, symname);
+                                address_tbl[i] = (ULONGLONG)(uintptr_t)unknown_symbol_stub;
+                                continue;
+                        } else {
+                                address_tbl[i] = (ULONGLONG)(uintptr_t)adr;
+                        }
+                }
+        } else {
+                /* 32-bit: use IMAGE_THUNK_DATA32 */
+                DWORD *lookup_tbl = RVA2VA(image, dirent->u.OriginalFirstThunk, DWORD *);
+                DWORD *address_tbl = RVA2VA(image, dirent->FirstThunk, DWORD *);
+
+                for (i = 0; lookup_tbl[i]; i++) {
+                        if (IMAGE_SNAP_BY_ORDINAL32(lookup_tbl[i])) {
+                                ERROR("ordinal import not supported: %u", lookup_tbl[i]);
+                                address_tbl[i] = (DWORD)(uintptr_t)ordinal_import_stub;
+                                continue;
+                        } else {
+                                symname = RVA2VA(image, ((lookup_tbl[i] & ~IMAGE_ORDINAL_FLAG32) + 2), char *);
+                        }
+
+                        if (get_export(symname, &adr) < 0) {
+                                ERROR("unknown symbol: %s:%s", dll, symname);
+                                address_tbl[i] = (DWORD)(uintptr_t)unknown_symbol_stub;
+                                continue;
+                        } else {
+                                address_tbl[i] = (DWORD)(uintptr_t)adr;
+                        }
                 }
         }
 
@@ -301,12 +338,10 @@ static int read_exports(struct pe_image *pe)
         int i;
         uint32_t *name_table;
         uint16_t *ordinal_table;
-        PIMAGE_OPTIONAL_HEADER opt_hdr;
         IMAGE_DATA_DIRECTORY *export_data_dir;
 
-        opt_hdr = &pe->nt_hdr->OptionalHeader;
-        export_data_dir =
-                &opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+        /* Use architecture-appropriate data directory */
+        export_data_dir = &PE_DATA_DIRECTORY(pe)[IMAGE_DIRECTORY_ENTRY_EXPORT];
 
         if (export_data_dir->Size == 0) {
                 DBGLINKER("no exports");
@@ -317,20 +352,23 @@ static int read_exports(struct pe_image *pe)
                 RVA2VA(pe->image, export_data_dir->VirtualAddress,
                        IMAGE_EXPORT_DIRECTORY *);
 
-        name_table = (unsigned int *)(pe->image +
+        /* Export tables use 32-bit RVAs even in PE64 */
+        name_table = (uint32_t *)(pe->image +
                                       export_dir_table->AddressOfNames);
         ordinal_table = (uint16_t *)(pe->image +
                                       export_dir_table->AddressOfNameOrdinals);
 
+        /* Reset export count for this image */
+        num_pe_exports = 0;
         pe_exports = calloc(export_dir_table->NumberOfNames, sizeof(struct pe_exports));
-        if (!pe_exports) {
+        if (!pe_exports && export_dir_table->NumberOfNames > 0) {
                 ERROR("failed to allocate exports table");
                 return -ENOMEM;
         }
-        num_pe_exports = 0;
 
         for (i = 0; i < export_dir_table->NumberOfNames; i++) {
-                uint32_t address = ((uint32_t *) (pe->image + export_dir_table->AddressOfFunctions))[*ordinal_table];
+                /* Export RVAs are 32-bit even in PE64 */
+                uint32_t address = ((uint32_t *)(pe->image + export_dir_table->AddressOfFunctions))[*ordinal_table];
 
                 if (export_data_dir->VirtualAddress <= address ||
                     address >= (export_data_dir->VirtualAddress +
@@ -353,48 +391,44 @@ static int read_exports(struct pe_image *pe)
         return 0;
 }
 
-static int fixup_imports(void *image, IMAGE_NT_HEADERS *nt_hdr)
+static int fixup_imports(struct pe_image *pe)
 {
         int i;
         char *name;
         int ret = 0;
         IMAGE_IMPORT_DESCRIPTOR *dirent;
         IMAGE_DATA_DIRECTORY *import_data_dir;
-        PIMAGE_OPTIONAL_HEADER opt_hdr;
 
-        opt_hdr = &nt_hdr->OptionalHeader;
-        import_data_dir =
-                &opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-        dirent = RVA2VA(image, import_data_dir->VirtualAddress,
+        import_data_dir = &PE_DATA_DIRECTORY(pe)[IMAGE_DIRECTORY_ENTRY_IMPORT];
+        dirent = RVA2VA(pe->image, import_data_dir->VirtualAddress,
                         IMAGE_IMPORT_DESCRIPTOR *);
 
         for (i = 0; dirent[i].Name; i++) {
-                name = RVA2VA(image, dirent[i].Name, char*);
+                name = RVA2VA(pe->image, dirent[i].Name, char*);
 
                 DBGLINKER("imports from dll: %s", name);
-                ret += import(image, &dirent[i], name);
+                ret += import(pe->image, &dirent[i], name, pe->is_64bit);
         }
         return ret;
 }
 
-static int fixup_reloc(void *image, IMAGE_NT_HEADERS *nt_hdr)
+static int fixup_reloc(struct pe_image *pe)
 {
-        ULONG_PTR base;
+        ULONGLONG base;
         ULONG_PTR size;
         IMAGE_BASE_RELOCATION *fixup_block;
         IMAGE_DATA_DIRECTORY *base_reloc_data_dir;
-        PIMAGE_OPTIONAL_HEADER opt_hdr;
 
-        opt_hdr = &nt_hdr->OptionalHeader;
-        base = opt_hdr->ImageBase;
-        base_reloc_data_dir =
-                &opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+        /* Get ImageBase as 64-bit value (works for both architectures) */
+        base = PE_IMAGE_BASE(pe);
+        base_reloc_data_dir = &PE_DATA_DIRECTORY(pe)[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+
         if (base_reloc_data_dir->Size == 0)
                 return 0;
 
-        fixup_block = RVA2VA(image, base_reloc_data_dir->VirtualAddress,
+        fixup_block = RVA2VA(pe->image, base_reloc_data_dir->VirtualAddress,
                              IMAGE_BASE_RELOCATION *);
-        DBGLINKER("fixup_block=%p, image=%p", fixup_block, image);
+        DBGLINKER("fixup_block=%p, image=%p", fixup_block, pe->image);
         DBGLINKER("fixup_block info: %x %d",
                   fixup_block->VirtualAddress, fixup_block->SizeOfBlock);
 
@@ -414,10 +448,10 @@ static int fixup_reloc(void *image, IMAGE_NT_HEADERS *nt_hdr)
                         case IMAGE_REL_BASED_HIGHLOW: {
                                 uint32_t addr;
                                 uint32_t *loc =
-                                        RVA2VA(image,
+                                        RVA2VA(pe->image,
                                                fixup_block->VirtualAddress +
                                                offset, uint32_t *);
-                                addr = RVA2VA(image, (*loc - base), uint32_t);
+                                addr = RVA2VA(pe->image, (*loc - (uint32_t)base), uint32_t);
                                 *loc = addr;
                         }
                                 break;
@@ -425,10 +459,10 @@ static int fixup_reloc(void *image, IMAGE_NT_HEADERS *nt_hdr)
                         case IMAGE_REL_BASED_DIR64: {
                                 uint64_t addr;
                                 uint64_t *loc =
-                                        RVA2VA(image,
+                                        RVA2VA(pe->image,
                                                fixup_block->VirtualAddress +
                                                offset, uint64_t *);
-                                addr = RVA2VA(image, (*loc - base), uint64_t);
+                                addr = RVA2VA(pe->image, (*loc - base), uint64_t);
                                 DBGLINKER("relocation: *%p (Val:%llX)= %llx",
                                           loc, *loc, addr);
                                 *loc = addr;
@@ -463,17 +497,22 @@ static int fix_pe_image(struct pe_image *pe)
         IMAGE_SECTION_HEADER *sect_hdr;
         int i, sections;
         size_t image_size;
+        ULONGLONG image_base;
 
-        if (pe->size == pe->opt_hdr->SizeOfImage) {
+        image_size = PE_OPT_HDR_FIELD(pe, SizeOfImage);
+
+        if (pe->size == image_size) {
                 /* Nothing to do */
                 return 0;
         }
 
-        image_size = pe->opt_hdr->SizeOfImage;
+        image_base = PE_IMAGE_BASE(pe);
 
         // TODO: If image does not have DYNAMIC_BASE, add MAP_FIXED.
+        // For 64-bit images, we can't map at the preferred base (usually > 4GB)
+        // so we always let the OS choose the address.
 
-        image      = mmap((PVOID)(pe->opt_hdr->ImageBase),
+        image = mmap(pe->is_64bit ? NULL : (PVOID)(uintptr_t)image_base,
                           image_size + getpagesize(),
                           PROT_READ | PROT_WRITE | PROT_EXEC,
                           MAP_ANONYMOUS | MAP_PRIVATE,
@@ -481,8 +520,8 @@ static int fix_pe_image(struct pe_image *pe)
                           0);
 
         if (image == MAP_FAILED) {
-                ERROR("failed to mmap desired space for image: %zu bytes, image base %#x, %m",
-                    image_size, pe->opt_hdr->ImageBase);
+                ERROR("failed to mmap desired space for image: %zu bytes, image base %#llx, %m",
+                    image_size, image_base);
                 return -ENOMEM;
         }
 
@@ -490,8 +529,8 @@ static int fix_pe_image(struct pe_image *pe)
 
         /* Copy all the headers, ie everything before the first section. */
 
-        sections = pe->nt_hdr->FileHeader.NumberOfSections;
-        sect_hdr = IMAGE_FIRST_SECTION(pe->nt_hdr);
+        sections = PE_FILE_HEADER(pe)->NumberOfSections;
+        sect_hdr = PE_FIRST_SECTION(pe);
 
         DBGLINKER("copying headers: %u bytes", sect_hdr->PointerToRawData);
 
@@ -521,10 +560,13 @@ static int fix_pe_image(struct pe_image *pe)
         pe->image = image;
         pe->size = image_size;
 
-        /* Update our internal pointers */
-        pe->nt_hdr = (IMAGE_NT_HEADERS *)
-                (pe->image + ((IMAGE_DOS_HEADER *)pe->image)->e_lfanew);
-        pe->opt_hdr = &pe->nt_hdr->OptionalHeader;
+        /* Update our internal pointers - use union member to set both */
+        pe->nt_hdr = pe->image + ((IMAGE_DOS_HEADER *)pe->image)->e_lfanew;
+        if (pe->is_64bit) {
+                pe->opt64 = &pe->nt_hdr64->OptionalHeader;
+        } else {
+                pe->opt32 = &pe->nt_hdr32->OptionalHeader;
+        }
 
         DBGLINKER("set nt headers: nt_hdr=%p, opt_hdr=%p, image=%p",
                   pe->nt_hdr, pe->opt_hdr, pe->image);
@@ -547,11 +589,11 @@ int link_pe_images(struct pe_image *pe_image, unsigned short n)
                         return -EINVAL;
                 }
 
-                pe->nt_hdr =
-                        (IMAGE_NT_HEADERS *)(pe->image + dos_hdr->e_lfanew);
-                pe->opt_hdr = &pe->nt_hdr->OptionalHeader;
+                /* Set up NT headers pointer (use nt_hdr which aliases both) */
+                pe->nt_hdr = pe->image + dos_hdr->e_lfanew;
 
-                pe->type = check_nt_hdr(pe->nt_hdr);
+                /* check_nt_hdr sets is_64bit, opt32/opt64, and validates the PE */
+                pe->type = check_nt_hdr(pe);
                 if (pe->type <= 0) {
                         TRACE1("type <= 0");
                         return -EINVAL;
@@ -571,22 +613,23 @@ int link_pe_images(struct pe_image *pe_image, unsigned short n)
         for (i = 0; i < n; i++) {
                 pe = &pe_image[i];
 
-                if (fixup_reloc(pe->image, pe->nt_hdr)) {
+                if (fixup_reloc(pe)) {
                         TRACE1("fixup reloc failed");
                         return -EINVAL;
                 }
-                if (fixup_imports(pe->image, pe->nt_hdr)) {
+                if (fixup_imports(pe)) {
                         TRACE1("fixup imports failed");
                         return -EINVAL;
                 }
-                pe->entry =
-                        RVA2VA(pe->image,
-                               pe->opt_hdr->AddressOfEntryPoint, void *);
+
+                /* Get entry point using architecture-appropriate field */
+                pe->entry = RVA2VA(pe->image,
+                               PE_OPT_HDR_FIELD(pe, AddressOfEntryPoint), void *);
                 //TRACE1("entry is at %p, rva at %08X", pe->entry,
-                //       pe->opt_hdr->AddressOfEntryPoint);
+                //       PE_OPT_HDR_FIELD(pe, AddressOfEntryPoint));
 
                 // Check if there were enough data directories for a TLS section.
-                if (pe->opt_hdr->NumberOfRvaAndSizes >= IMAGE_DIRECTORY_ENTRY_TLS) {
+                if (PE_OPT_HDR_FIELD(pe, NumberOfRvaAndSizes) >= IMAGE_DIRECTORY_ENTRY_TLS) {
                     // Normally, we would be expected to allocate a TLS slot,
                     // place the number into *TlsData->AddressOfIndex, and make
                     // it a pointer to RawData, and then process the callbacks.
@@ -598,7 +641,7 @@ int link_pe_images(struct pe_image *pe_image, unsigned short n)
                     // FIXME: Verify callbacks list is empty and SizeOfZeroFill is zero.
                     //
                     PIMAGE_TLS_DIRECTORY TlsData = RVA2VA(pe->image,
-                                                          pe->opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress,
+                                                          PE_DATA_DIRECTORY(pe)[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress,
                                                           IMAGE_TLS_DIRECTORY *);
 
                     // This means that slot 0 is reserved.
@@ -681,6 +724,26 @@ bool setup_nt_threadinfo(PEXCEPTION_HANDLER ExceptionHandler)
         .ThreadLocalStoragePointer  = LocalStorage, // https://github.com/taviso/loadlibrary/issues/65
         .ProcessEnvironmentBlock    = &ProcessEnvironmentBlock,
     };
+
+    if (ExceptionHandler) {
+        if (ThreadEnvironment.Tib.ExceptionList) {
+            DebugLog("Resetting ThreadInfo.ExceptionList");
+        }
+        ExceptionFrame.handler              = ExceptionHandler;
+        ExceptionFrame.prev                 = NULL;
+        ThreadEnvironment.Tib.ExceptionList = &ExceptionFrame;
+    }
+
+#ifdef __x86_64__
+    // x86_64: Use arch_prctl to set GS base (Windows x64 uses GS for TEB)
+    #ifndef ARCH_SET_GS
+    #define ARCH_SET_GS 0x1001
+    #endif
+    if (syscall(__NR_arch_prctl, ARCH_SET_GS, &ThreadEnvironment) != 0) {
+        return false;
+    }
+#else
+    // x86: Use set_thread_area to set up FS segment
     struct user_desc pebdescriptor = {
         .entry_number       = -1,
         .base_addr          = (uintptr_t) &ThreadEnvironment,
@@ -693,21 +756,13 @@ bool setup_nt_threadinfo(PEXCEPTION_HANDLER ExceptionHandler)
         .useable            = 1,
     };
 
-    if (ExceptionHandler) {
-        if (ThreadEnvironment.Tib.ExceptionList) {
-            DebugLog("Resetting ThreadInfo.ExceptionList");
-        }
-        ExceptionFrame.handler              = ExceptionHandler;
-        ExceptionFrame.prev                 = NULL;
-        ThreadEnvironment.Tib.ExceptionList = &ExceptionFrame;
-    }
-
     if (syscall(__NR_set_thread_area, &pebdescriptor) != 0) {
         return false;
     }
 
     // Install descriptor
     asm("mov %[segment], %%fs" :: [segment] "r"(pebdescriptor.entry_number*8+3));
+#endif
 
     return true;
 }

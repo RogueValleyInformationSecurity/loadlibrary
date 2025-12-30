@@ -18,6 +18,21 @@
 #include "winexports.h"
 #include "util.h"
 
+// x86_64 uses different registers and segment (GS instead of FS)
+#ifdef __x86_64__
+# define REG_BP REG_RBP
+# define REG_IP REG_RIP
+# define REG_SP REG_RSP
+# define REG_AX REG_RAX
+# define SEG_REG "gs"
+#else
+# define REG_BP REG_EBP
+# define REG_IP REG_EIP
+# define REG_SP REG_ESP
+# define REG_AX REG_EAX
+# define SEG_REG "fs"
+#endif
+
 #ifndef NDEBUG
 // You can use `call DumpExceptionChain()` in gdb, like !exchain in windbg if
 // you need to debug exception handling.
@@ -27,7 +42,7 @@ VOID DumpExceptionChain(VOID)
     DWORD Depth;
 
     // Fetch Exception List
-    asm("mov %%fs:0, %[list]" : [list] "=r"(ExceptionList));
+    asm("mov %%" SEG_REG ":0, %[list]" : [list] "=r"(ExceptionList));
 
     DebugLog("ExceptionList %p, Dumping SEH Chain...", ExceptionList);
 
@@ -64,7 +79,7 @@ static WINAPI PVOID RaiseException(DWORD dwExceptionCode, DWORD dwExceptionFlags
     }
 
     // Fetch Exception List
-    asm("mov %%fs:0, %[list]" : [list] "=r"(ExceptionList));
+    asm("mov %%" SEG_REG ":0, %[list]" : [list] "=r"(ExceptionList));
 
     DebugLog("C++ Exception %#x! ExceptionList %p, Dumping SEH Chain...", dwExceptionCode, ExceptionList);
 
@@ -124,13 +139,19 @@ static WINAPI void RtlUnwind(PEXCEPTION_FRAME TargetFrame, PVOID TargetIp, PEXCE
     }
 
     // This was suuuuuuper complicated to get right and make mpengine happy.
-    Context.uc_mcontext.gregs[REG_EBP] = ((uintptr_t *)(__builtin_frame_address(0)))[0];
-    Context.uc_mcontext.gregs[REG_EIP] = ((uintptr_t *)(__builtin_frame_address(0)))[1];
-    Context.uc_mcontext.gregs[REG_ESP] = ((uintptr_t)(__builtin_frame_address(0))) + 8 + 16; // Find esp (+8) then skip args (+4*4)
-    Context.uc_mcontext.gregs[REG_EAX] = ((uintptr_t)(ReturnValue));
+    Context.uc_mcontext.gregs[REG_BP] = ((uintptr_t *)(__builtin_frame_address(0)))[0];
+    Context.uc_mcontext.gregs[REG_IP] = ((uintptr_t *)(__builtin_frame_address(0)))[1];
+#ifdef __x86_64__
+    // x86_64: +8 for return addr, +8*4 for 4 register args (rcx, rdx, r8, r9)
+    Context.uc_mcontext.gregs[REG_SP] = ((uintptr_t)(__builtin_frame_address(0))) + 8 + 32;
+#else
+    // x86: +8 for return addr, +4*4 for 4 stack args
+    Context.uc_mcontext.gregs[REG_SP] = ((uintptr_t)(__builtin_frame_address(0))) + 8 + 16;
+#endif
+    Context.uc_mcontext.gregs[REG_AX] = ((uintptr_t)(ReturnValue));
 
     // Fetch Exception List
-    asm("mov %%fs:0, %[list]" : [list] "=r"(ExceptionList));
+    asm("mov %%" SEG_REG ":0, %[list]" : [list] "=r"(ExceptionList));
 
     for (Depth = 0; ExceptionList; ExceptionList = ExceptionList->prev) {
         DWORD Result;
@@ -163,7 +184,7 @@ static WINAPI void RtlUnwind(PEXCEPTION_FRAME TargetFrame, PVOID TargetIp, PEXCE
         }
 
         // Remove handler.
-        asm("mov %[list], %%fs:0" :: [list] "r"(ExceptionList->prev));
+        asm("mov %[list], %%" SEG_REG ":0" :: [list] "r"(ExceptionList->prev));
     }
 
     // Unhandled C++ Exception?
