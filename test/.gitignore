@@ -5,5 +5,7 @@
 *.zip
 *.c
 !test64_client.c
+!fuzz32.c
+!fuzz64.c
 *.txt
 *.o

@@ -12,3 +12,5 @@ eicar.com
 .gradle/
 .idea/
 test64
+harness32
+harness64
