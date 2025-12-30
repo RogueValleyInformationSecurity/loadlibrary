@@ -45,9 +45,19 @@ struct pe_image {
         void *image;
         size_t size;
         int type;
+        int is_64bit;  /* 0 = PE32, 1 = PE32+ (64-bit) */
 
-        IMAGE_NT_HEADERS *nt_hdr;
-        IMAGE_OPTIONAL_HEADER *opt_hdr;
+        /* Use unions for polymorphic header access */
+        union {
+                IMAGE_NT_HEADERS32 *nt_hdr32;
+                IMAGE_NT_HEADERS64 *nt_hdr64;
+                void *nt_hdr;
+        };
+        union {
+                IMAGE_OPTIONAL_HEADER32 *opt32;
+                IMAGE_OPTIONAL_HEADER64 *opt64;
+                void *opt_hdr;
+        };
 };
 
 struct ntos_work_item {

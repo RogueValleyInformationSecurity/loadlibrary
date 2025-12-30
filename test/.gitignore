@@ -1,0 +1,8 @@
+# Downloaded/built test files - not committed
+*.dll
+*.exe
+*.7z
+*.zip
+*.c
+*.txt
+*.o

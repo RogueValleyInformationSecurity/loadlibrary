@@ -702,8 +702,32 @@ typedef struct __packed _IMAGE_IMPORT_DESCRIPTOR {
 #define IMAGE_SNAP_BY_ORDINAL64(Ordinal) ((Ordinal & IMAGE_ORDINAL_FLAG64) != 0)
 #define IMAGE_ORDINAL(Ordinal) (Ordinal & 0xffff)
 
+/* Architecture-dependent macros - defaults for 32-bit */
 #define IMAGE_ORDINAL_FLAG IMAGE_ORDINAL_FLAG32
 #define IMAGE_SNAP_BY_ORDINAL IMAGE_SNAP_BY_ORDINAL32
+
+/* PE64 helper macros for architecture-independent code */
+#define PE_IS_64BIT(pe) ((pe)->is_64bit)
+
+/* Get optional header fields - works for both 32 and 64-bit */
+#define PE_OPT_HDR_FIELD(pe, field) \
+    (PE_IS_64BIT(pe) ? (pe)->opt64->field : (pe)->opt32->field)
+
+/* Get ImageBase as 64-bit value for both architectures */
+#define PE_IMAGE_BASE(pe) \
+    ((ULONGLONG)(PE_IS_64BIT(pe) ? (pe)->opt64->ImageBase : (pe)->opt32->ImageBase))
+
+/* Get DataDirectory for both architectures */
+#define PE_DATA_DIRECTORY(pe) \
+    (PE_IS_64BIT(pe) ? (pe)->opt64->DataDirectory : (pe)->opt32->DataDirectory)
+
+/* Get sections header - works for both because FileHeader is at same offset */
+#define PE_FIRST_SECTION(pe) \
+    ((PIMAGE_SECTION_HEADER)((LPBYTE)&((pe)->nt_hdr32->OptionalHeader) + \
+        (pe)->nt_hdr32->FileHeader.SizeOfOptionalHeader))
+
+/* Get FileHeader - same location in both 32 and 64-bit */
+#define PE_FILE_HEADER(pe) (&(pe)->nt_hdr32->FileHeader)
 
 typedef struct _IMAGE_BOUND_IMPORT_DESCRIPTOR
 {

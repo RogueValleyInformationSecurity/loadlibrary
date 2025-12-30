@@ -16,6 +16,8 @@
 #ifndef _WINNT_TYPES_H_
 #define _WINNT_TYPES_H_
 
+#include <stddef.h>  /* for offsetof */
+
 #define DLL_PROCESS_ATTACH              1
 #define DLL_PROCESS_DETACH              0
 #define DLL_THREAD_ATTACH               2
