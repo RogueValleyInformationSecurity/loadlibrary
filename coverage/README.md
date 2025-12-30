@@ -134,6 +134,59 @@ Now you can load this file in IDA with `File->Script File...`.
 * The pintool only starts collecting coverage data once you've called `InstrumentationCallback()`.
 * You can blacklist blocks you don't want instrumented by listing them in `blacklist.h`.
 
+## AFL Integration
+
+The `afl_deepcover.so` PIN tool provides real-time coverage feedback to AFL++
+for coverage-guided fuzzing of Windows DLLs.
+
+### Building
+
+```bash
+cd coverage
+make tools
+```
+
+This builds both `deepcover.so` (offline coverage) and `afl_deepcover.so`
+(AFL integration).
+
+### Usage with AFL++
+
+```bash
+# Create seed corpus
+mkdir -p corpus findings
+echo "test" > corpus/seed.bin
+
+# Run AFL++ with PIN coverage
+afl-fuzz -i corpus -o findings -- \
+  ./coverage/pin -t coverage/afl_deepcover.so -- ./harness target.dll
+```
+
+### How It Works
+
+1. AFL++ sets the `__AFL_SHM_ID` environment variable pointing to shared memory
+2. The PIN tool attaches to this shared memory at startup
+3. For each basic block executed in the target DLL, an edge ID is computed:
+   - `edge_id = (prev_loc >> 1) XOR cur_loc`
+4. The edge is recorded in AFL's bitmap: `bitmap[edge_id]++`
+5. AFL uses this coverage feedback to guide mutation
+
+### Performance Notes
+
+- PIN instrumentation adds ~10-50x overhead compared to native execution
+- This is slower than AFL's compiler instrumentation but provides DLL coverage
+- Typical speed: 100-500 exec/sec (vs 15,000-35,000 with persistent mode alone)
+- The coverage guidance often compensates for the speed reduction
+
+### Standalone Testing
+
+Run without AFL to verify coverage collection:
+
+```bash
+./coverage/pin -t coverage/afl_deepcover.so -- ./harness target.dll < input.bin
+```
+
+This uses a local bitmap and prints coverage statistics at exit.
+
 ## License
 
 GPL2

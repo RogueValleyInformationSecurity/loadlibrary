@@ -18,12 +18,13 @@ dlls:
 apps:
 libs:
 
-tools: deepcover.so
+tools: deepcover.so afl_deepcover.so
 	@echo \#!/bin/sh > pin
 	@echo exec $(PIN_ROOT)/pin \$$\@ >> pin
 	@chmod +x pin
 
 OBJS = tree.o deepcover.o instrument.o
+AFL_OBJS = afl_deepcover.o afl_instrument.o
 
 %.o : %.cpp
 	$(CXX) $(COMP_OBJ) $@ $(CXXFLAGS) $(TOOL_CXXFLAGS) $<
@@ -34,9 +35,13 @@ OBJS = tree.o deepcover.o instrument.o
 deepcover.so : $(OBJS)
 	$(CXX) $(LINK_EXE) $@ $(LDFLAGS) $(TOOL_LDFLAGS) $(OBJS) $(TOOL_LPATHS) $(TOOL_LIBS) -static-libgcc -static-libstdc++
 
+# AFL-integrated PIN tool for coverage-guided fuzzing
+afl_deepcover.so : $(AFL_OBJS)
+	$(CXX) $(LINK_EXE) $@ $(LDFLAGS) $(TOOL_LDFLAGS) $(AFL_OBJS) $(TOOL_LPATHS) $(TOOL_LIBS) -static-libgcc -static-libstdc++
+
 coverage_parse_min: coverage_parse_min.c
 	gcc -std=gnu99 $(CFLAGS) $(LDFLAGS) $(shell pkg-config glib-2.0 --cflags) -o $@ $<  $(shell pkg-config glib-2.0 --libs)
 
 clean:
-	rm -f *.o deepcover.so core *.core pin *.log blocks.txt coverage.txt summary.txt
+	rm -f *.o deepcover.so afl_deepcover.so core *.core pin *.log blocks.txt coverage.txt summary.txt
 	rm -f coverage_parse_min
