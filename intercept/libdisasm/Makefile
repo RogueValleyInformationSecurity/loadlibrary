@@ -1,5 +1,9 @@
 CFLAGS=-O2 -ggdb3 -m32 -std=gnu99 -fshort-wchar -Wall -Wextra -Wno-multichar -DHAVE_CONFIG_H -I.
+CFLAGS += -MMD -MP -fstack-protector-strong
+CPPFLAGS=-D_FORTIFY_SOURCE=2
 LDFLAGS= $(CFLAGS) -m32
+
+-include *.d
 
 all: libdisasm.a
 
@@ -20,4 +24,4 @@ libdisasm.a: ia32_implicit.o        \
 	$(AR) $(ARFLAGS) $@ $^
 
 clean:
-	rm -f *.o *.a
+	rm -f *.o *.d *.a
