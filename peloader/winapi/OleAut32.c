@@ -78,7 +78,7 @@ typedef struct {
 //
 
 // SysAllocString - ordinal 2
-STATIC BSTR WINAPI SysAllocString(LPCWSTR psz)
+STATIC BSTR WINCALL SysAllocString(LPCWSTR psz)
 {
     DebugLog("");
     if (!psz) return NULL;
@@ -101,7 +101,7 @@ STATIC BSTR WINAPI SysAllocString(LPCWSTR psz)
 }
 
 // SysReAllocString - ordinal 4
-STATIC INT WINAPI SysReAllocString(BSTR *pbstr, LPCWSTR psz)
+STATIC INT WINCALL SysReAllocString(BSTR *pbstr, LPCWSTR psz)
 {
     DebugLog("");
     if (!pbstr) return FALSE;
@@ -121,7 +121,7 @@ STATIC INT WINAPI SysReAllocString(BSTR *pbstr, LPCWSTR psz)
 }
 
 // SysFreeString - ordinal 6
-STATIC void WINAPI SysFreeString(BSTR bstr)
+STATIC void WINCALL SysFreeString(BSTR bstr)
 {
     DebugLog("");
     if (bstr) {
@@ -131,7 +131,7 @@ STATIC void WINAPI SysFreeString(BSTR bstr)
 }
 
 // SysStringLen - ordinal 7 (returns length in WCHARs)
-STATIC UINT WINAPI SysStringLen(BSTR bstr)
+STATIC UINT WINCALL SysStringLen(BSTR bstr)
 {
     DebugLog("");
     if (!bstr) return 0;
@@ -140,7 +140,7 @@ STATIC UINT WINAPI SysStringLen(BSTR bstr)
 }
 
 // SysStringByteLen - ordinal 149
-STATIC UINT WINAPI SysStringByteLen(BSTR bstr)
+STATIC UINT WINCALL SysStringByteLen(BSTR bstr)
 {
     DebugLog("");
     if (!bstr) return 0;
@@ -149,7 +149,7 @@ STATIC UINT WINAPI SysStringByteLen(BSTR bstr)
 }
 
 // SysAllocStringByteLen - ordinal 150
-STATIC BSTR WINAPI SysAllocStringByteLen(PCHAR psz, UINT len)
+STATIC BSTR WINCALL SysAllocStringByteLen(PCHAR psz, UINT len)
 {
     DebugLog("");
     DWORD *ptr = malloc(sizeof(DWORD) + len + sizeof(WCHAR));
@@ -174,7 +174,7 @@ STATIC BSTR WINAPI SysAllocStringByteLen(PCHAR psz, UINT len)
 //
 
 // VariantInit - ordinal 8
-STATIC void WINAPI VariantInit(VARIANT_LOCAL *pvarg)
+STATIC void WINCALL VariantInit(VARIANT_LOCAL *pvarg)
 {
     DebugLog("%p", pvarg);
     if (pvarg) {
@@ -184,7 +184,7 @@ STATIC void WINAPI VariantInit(VARIANT_LOCAL *pvarg)
 }
 
 // VariantClear - ordinal 9
-STATIC HRESULT WINAPI VariantClear(VARIANT_LOCAL *pvarg)
+STATIC HRESULT WINCALL VariantClear(VARIANT_LOCAL *pvarg)
 {
     DebugLog("%p", pvarg);
     if (!pvarg) return E_INVALIDARG;
@@ -245,7 +245,7 @@ STATIC SAFEARRAY_LOCAL * WINAPI SafeArrayCreateVector(VARTYPE vt, LONG lLbound, 
 }
 
 // SafeArrayDestroy - ordinal 16
-STATIC HRESULT WINAPI SafeArrayDestroy(SAFEARRAY_LOCAL *psa)
+STATIC HRESULT WINCALL SafeArrayDestroy(SAFEARRAY_LOCAL *psa)
 {
     DebugLog("%p", psa);
     if (!psa) return E_INVALIDARG;
@@ -259,7 +259,7 @@ STATIC HRESULT WINAPI SafeArrayDestroy(SAFEARRAY_LOCAL *psa)
 }
 
 // SafeArrayGetDim - ordinal 12
-STATIC UINT WINAPI SafeArrayGetDim(SAFEARRAY_LOCAL *psa)
+STATIC UINT WINCALL SafeArrayGetDim(SAFEARRAY_LOCAL *psa)
 {
     DebugLog("%p", psa);
     if (!psa) return 0;
@@ -267,7 +267,7 @@ STATIC UINT WINAPI SafeArrayGetDim(SAFEARRAY_LOCAL *psa)
 }
 
 // SafeArrayGetElement - ordinal 17
-STATIC HRESULT WINAPI SafeArrayGetElement(SAFEARRAY_LOCAL *psa, LONG *rgIndices, void *pv)
+STATIC HRESULT WINCALL SafeArrayGetElement(SAFEARRAY_LOCAL *psa, LONG *rgIndices, void *pv)
 {
     DebugLog("%p, %p, %p", psa, rgIndices, pv);
     if (!psa || !rgIndices || !pv) return E_INVALIDARG;
@@ -287,7 +287,7 @@ STATIC HRESULT WINAPI SafeArrayGetElement(SAFEARRAY_LOCAL *psa, LONG *rgIndices,
 }
 
 // SafeArrayPutElement - ordinal 18
-STATIC HRESULT WINAPI SafeArrayPutElement(SAFEARRAY_LOCAL *psa, LONG *rgIndices, void *pv)
+STATIC HRESULT WINCALL SafeArrayPutElement(SAFEARRAY_LOCAL *psa, LONG *rgIndices, void *pv)
 {
     DebugLog("%p, %p, %p", psa, rgIndices, pv);
     if (!psa || !rgIndices || !pv) return E_INVALIDARG;
@@ -307,7 +307,7 @@ STATIC HRESULT WINAPI SafeArrayPutElement(SAFEARRAY_LOCAL *psa, LONG *rgIndices,
 }
 
 // SafeArrayGetVartype - ordinal 77
-STATIC HRESULT WINAPI SafeArrayGetVartype(SAFEARRAY_LOCAL *psa, VARTYPE *pvt)
+STATIC HRESULT WINCALL SafeArrayGetVartype(SAFEARRAY_LOCAL *psa, VARTYPE *pvt)
 {
     DebugLog("%p, %p", psa, pvt);
     if (!psa || !pvt) return E_INVALIDARG;
@@ -320,7 +320,7 @@ STATIC HRESULT WINAPI SafeArrayGetVartype(SAFEARRAY_LOCAL *psa, VARTYPE *pvt)
 //
 
 // VarBstrCat - ordinal 184
-STATIC HRESULT WINAPI VarBstrCat(BSTR bstrLeft, BSTR bstrRight, BSTR *pbstrResult)
+STATIC HRESULT WINCALL VarBstrCat(BSTR bstrLeft, BSTR bstrRight, BSTR *pbstrResult)
 {
     DebugLog("");
     if (!pbstrResult) return E_INVALIDARG;
@@ -349,7 +349,7 @@ STATIC HRESULT WINAPI VarBstrCat(BSTR bstrLeft, BSTR bstrRight, BSTR *pbstrResul
 }
 
 // VarBstrCmp - ordinal 314
-STATIC HRESULT WINAPI VarBstrCmp(BSTR bstrLeft, BSTR bstrRight, DWORD lcid, DWORD dwFlags)
+STATIC HRESULT WINCALL VarBstrCmp(BSTR bstrLeft, BSTR bstrRight, DWORD lcid, DWORD dwFlags)
 {
     DebugLog("");
     (void)lcid;

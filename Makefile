@@ -15,7 +15,7 @@ CFLAGS64  = $(COMMON_CFLAGS) -m64 -march=x86-64 -mtune=generic
 LDFLAGS64 = $(CFLAGS64) -m64 -lm -Wl,--dynamic-list=exports.lst
 LDLIBS64  = -Wl,--whole-archive,peloader/libpeloader64.a,--no-whole-archive
 
-.PHONY: clean peloader peloader64 intercept test64 harness32 harness64 examples afl_persistent afl_persistent64
+.PHONY: clean peloader peloader64 intercept test64 harness32 harness64 examples afl_persistent afl_persistent64 test_ordinal test_ordinal64
 
 TARGETS=mpclient | peloader
 
@@ -67,6 +67,21 @@ afl_persistent64: test/afl_persistent64.64.o | peloader64
 test/afl_persistent64.64.o: test/afl_persistent64.c
 	$(CC) $(CFLAGS64) $(CPPFLAGS) -c -o $@ $<
 
+# Ordinal import tests
+# test_ordinal: 32-bit test for 32-bit DLL ordinal imports
+test_ordinal: test/test_ordinal_client.o | peloader
+	$(CC) $(CFLAGS) $^ -o $@ $(LDLIBS_HARNESS) $(LDFLAGS)
+
+test/test_ordinal_client.o: test/test_ordinal_client.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
+# test_ordinal64: 64-bit test for 64-bit DLL ordinal imports
+test_ordinal64: test/test_ordinal_client.64.o | peloader64
+	$(CC) $(CFLAGS64) $^ -o $@ $(LDLIBS_HARNESS64) $(LDFLAGS64)
+
+test/test_ordinal_client.64.o: test/test_ordinal_client.c
+	$(CC) $(CFLAGS64) $(CPPFLAGS) -c -o $@ $<
+
 harness32: examples/harness32.o | peloader
 	$(CC) $(CFLAGS) $^ -o $@ $(LDLIBS_HARNESS) $(LDFLAGS)
 
@@ -80,7 +95,7 @@ examples/harness64.64.o: examples/harness64.c
 	$(CC) $(CFLAGS64) $(CPPFLAGS) -c -o $@ $<
 
 clean:
-	rm -f a.out core *.o *.d core.* vgcore.* gmon.out mpclient test64 harness32 harness64 afl_persistent afl_persistent64 test/*.o test/*.d examples/*.o
+	rm -f a.out core *.o *.d core.* vgcore.* gmon.out mpclient test64 harness32 harness64 afl_persistent afl_persistent64 test_ordinal test_ordinal64 test/*.o test/*.d examples/*.o
 	make -C intercept clean
 	make -C peloader clean
 	rm -rf faketemp
