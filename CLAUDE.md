@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-loadlibrary is a specialized library that allows native Linux programs to load and execute 32-bit Windows PE DLLs. The primary use case is scalable fuzzing of Windows security products (particularly Windows Defender's mpengine.dll) on Linux without virtualization overhead.
+loadlibrary is a specialized library that allows native Linux programs to load and execute Windows PE DLLs. It supports both 32-bit (PE32) and 64-bit (PE32+/PE64) Windows binaries. The primary use case is scalable fuzzing of Windows security products (particularly Windows Defender's mpengine.dll) on Linux without virtualization overhead.
 
 ## Build Commands
 
@@ -59,7 +59,8 @@ cabextract mpam-fe.exe   # Downloads from Microsoft's definition update page
 - `mpscript.c` - Interactive REPL interface
 
 **Key Design Constraints:**
-- 32-bit x86 only (`-m32` flag throughout)
+- Supports both 32-bit (PE32) and 64-bit (PE32+) Windows PE files
+- 32-bit builds use `-m32` flag; 64-bit builds require 64-bit host
 - Uses `-fshort-wchar` for Windows wchar_t compatibility
 - Custom memory allocator (dlmalloc) in `peloader/codealloc.h`
 
