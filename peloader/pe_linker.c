@@ -265,6 +265,40 @@ static int check_nt_hdr(struct pe_image *pe)
         return -EINVAL;
 }
 
+// OLEAUT32 ordinal-to-name mapping
+static const struct {
+        int ordinal;
+        const char *name;
+} oleaut32_ordinals[] = {
+        { 2, "SysAllocString" },
+        { 4, "SysReAllocString" },
+        { 6, "SysFreeString" },
+        { 7, "SysStringLen" },
+        { 8, "VariantInit" },
+        { 9, "VariantClear" },
+        { 12, "SafeArrayGetDim" },
+        { 15, "SafeArrayCreate" },
+        { 16, "SafeArrayDestroy" },
+        { 17, "SafeArrayGetElement" },
+        { 18, "SafeArrayPutElement" },
+        { 22, "SafeArrayCreateVector" },
+        { 77, "SafeArrayGetVartype" },
+        { 149, "SysStringByteLen" },
+        { 150, "SysAllocStringByteLen" },
+        { 184, "VarBstrCat" },
+        { 314, "VarBstrCmp" },
+        { 0, NULL }
+};
+
+static const char* resolve_oleaut32_ordinal(int ordinal)
+{
+        for (int i = 0; oleaut32_ordinals[i].name; i++) {
+                if (oleaut32_ordinals[i].ordinal == ordinal)
+                        return oleaut32_ordinals[i].name;
+        }
+        return NULL;
+}
+
 static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int is_64bit)
 {
         char *symname = NULL;
@@ -290,7 +324,19 @@ static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int i
 
                 for (i = 0; lookup_tbl[i]; i++) {
                         if (IMAGE_SNAP_BY_ORDINAL64(lookup_tbl[i])) {
-                                ERROR("ordinal import not supported: %llu", (uint64_t)lookup_tbl[i]);
+                                int ordinal = (int)(lookup_tbl[i] & 0xFFFF);
+                                const char *ordname = NULL;
+
+                                if (strcasecmp(dll, "OLEAUT32.dll") == 0 || strcasecmp(dll, "OLEAUT32") == 0) {
+                                        ordname = resolve_oleaut32_ordinal(ordinal);
+                                }
+
+                                if (ordname && get_export(ordname, &adr) >= 0) {
+                                        address_tbl[i] = (ULONGLONG)(uintptr_t)adr;
+                                        continue;
+                                }
+
+                                ERROR("ordinal import not supported: %s ordinal %d", dll, ordinal);
                                 address_tbl[i] = (ULONGLONG)(uintptr_t)ordinal_import_stub;
                                 continue;
                         } else {
@@ -312,7 +358,19 @@ static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int i
 
                 for (i = 0; lookup_tbl[i]; i++) {
                         if (IMAGE_SNAP_BY_ORDINAL32(lookup_tbl[i])) {
-                                ERROR("ordinal import not supported: %u", lookup_tbl[i]);
+                                int ordinal = (int)(lookup_tbl[i] & 0xFFFF);
+                                const char *ordname = NULL;
+
+                                if (strcasecmp(dll, "OLEAUT32.dll") == 0 || strcasecmp(dll, "OLEAUT32") == 0) {
+                                        ordname = resolve_oleaut32_ordinal(ordinal);
+                                }
+
+                                if (ordname && get_export(ordname, &adr) >= 0) {
+                                        address_tbl[i] = (DWORD)(uintptr_t)adr;
+                                        continue;
+                                }
+
+                                ERROR("ordinal import not supported: %s ordinal %d", dll, ordinal);
                                 address_tbl[i] = (DWORD)(uintptr_t)ordinal_import_stub;
                                 continue;
                         } else {

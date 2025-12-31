@@ -1,0 +1,11 @@
+; DEF file for test_ordinal64.dll
+; This forces imports from OLEAUT32 to be by ordinal rather than by name
+
+LIBRARY test_ordinal64
+
+IMPORTS
+    ; OLEAUT32 ordinal imports
+    ; Format: internal_name = dllname.ordinal
+    SysAllocString = OLEAUT32.2
+    SysFreeString = OLEAUT32.6
+    SysStringLen = OLEAUT32.7

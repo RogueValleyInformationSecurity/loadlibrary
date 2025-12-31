@@ -515,6 +515,96 @@ itself, consider:
 See `test/afl_persistent.c` and `test/afl_persistent64.c` for the full
 implementation.
 
+## Adding Ordinal Import Support
+
+Some Windows DLLs import functions by ordinal (numeric ID) rather than by name.
+The PE loader includes ordinal-to-name mappings for common DLLs like OLEAUT32.
+
+### When You Need This
+
+If you see errors like:
+```
+ordinal import not supported: OLEAUT32 ordinal 42
+```
+
+This means the DLL you're loading imports a function by ordinal that isn't in the mapping table.
+
+### Adding New Ordinal Mappings
+
+To add support for additional ordinals, edit `peloader/pe_linker.c`:
+
+1. Find the ordinal table for the DLL (e.g., `oleaut32_ordinals[]`)
+2. Add the missing ordinal-to-name mapping:
+
+```c
+static const struct {
+    int ordinal;
+    const char *name;
+} oleaut32_ordinals[] = {
+    { 2, "SysAllocString" },
+    { 6, "SysFreeString" },
+    // Add your new mapping here:
+    { 42, "YourFunctionName" },
+    { 0, NULL }  // Terminator
+};
+```
+
+3. Implement the function stub in `peloader/winapi/OleAut32.c`:
+
+```c
+HRESULT WINCALL YourFunctionName(DWORD arg1, PVOID arg2)
+{
+    DebugLog("%u, %p", arg1, arg2);
+    return 0;  // S_OK
+}
+
+DECLARE_CRT_EXPORT("YourFunctionName", YourFunctionName);
+```
+
+### Finding Ordinal Numbers
+
+To find which ordinals a DLL exports, use `dumpbin` on Windows or `winedump` on Linux:
+```bash
+# Windows
+dumpbin /exports oleaut32.dll
+
+# Linux (with Wine)
+winedump -j export oleaut32.dll
+```
+
+### Adding Support for New DLLs
+
+To add ordinal support for a completely new DLL:
+
+1. Create an ordinal table in `pe_linker.c`:
+```c
+static const struct {
+    int ordinal;
+    const char *name;
+} mydll_ordinals[] = {
+    { 1, "Function1" },
+    { 2, "Function2" },
+    { 0, NULL }
+};
+
+static const char* resolve_mydll_ordinal(int ordinal) {
+    for (int i = 0; mydll_ordinals[i].name; i++) {
+        if (mydll_ordinals[i].ordinal == ordinal)
+            return mydll_ordinals[i].name;
+    }
+    return NULL;
+}
+```
+
+2. Add the DLL check in the `import()` function's ordinal handling (both 32-bit and 64-bit paths):
+```c
+if (strcasecmp(dll, "MYDLL.dll") == 0 || strcasecmp(dll, "MYDLL") == 0) {
+    ordname = resolve_mydll_ordinal(ordinal);
+}
+```
+
+3. Create stub implementations in `peloader/winapi/MyDll.c`
+
 ## Further Examples
 
 * [avscript](https://github.com/taviso/avscript) - Loading another antivirus engine, demonstrates hooking and patching.

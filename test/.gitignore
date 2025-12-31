@@ -9,5 +9,8 @@
 !fuzz64.c
 !afl_persistent.c
 !afl_persistent64.c
+!test_ordinal32.c
+!test_ordinal64.c
+!test_ordinal_client.c
 *.txt
 *.o
