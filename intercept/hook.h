@@ -1,6 +1,8 @@
 #ifndef __HOOK_H
 #define __HOOK_H
 
+#include <stdint.h>
+
 bool insert_function_redirect(void *function, void *redirect, uint32_t flags);
 bool remove_function_redirect(void *function);
 bool redirect_call_within_function(void *function, void *target, void *redirect);
@@ -19,10 +21,7 @@ enum {
 //
 struct __attribute__((packed)) branch {
     uint8_t     opcode;
-    union {
-        uintptr_t   i;
-        void       *p;
-    } operand;
+    int32_t     operand;
     uint8_t     data[0];                // Used to chain instructions together.
 };
 
