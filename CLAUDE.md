@@ -9,6 +9,9 @@ loadlibrary is a specialized library that allows native Linux programs to load a
 ## Build Commands
 
 ```bash
+# First-time setup (Capstone submodule)
+git submodule update --init --recursive
+
 # Build everything
 make
 
@@ -50,10 +53,13 @@ cabextract mpam-fe.exe   # Downloads from Microsoft's definition update page
 
 - `intercept/` - Runtime hooking and patching
   - `hook.c` - Function hooking mechanism
-  - `libdisasm/` - x86 instruction disassembler
+  - `third_party/capstone/` - Capstone disassembler (bundled submodule)
 
 - `coverage/` - Intel PIN-based code coverage collection
   - `deepcover.cpp` - PIN tool for basic block tracking
+
+- `peloader/afl_coverage.c` - AFL-style shared map updates
+- `peloader/afl_bb_coverage.c` - Basic-block discovery + trampoline instrumentation
 
 - `mpclient.c` - Main loader application for Windows Defender
 - `mpscript.c` - Interactive REPL interface
@@ -68,7 +74,11 @@ cabextract mpam-fe.exe   # Downloads from Microsoft's definition update page
 - Compiler warnings enabled: `-Wall -Wextra -Wno-multichar`
 - Security hardening: `-fstack-protector-strong -D_FORTIFY_SOURCE=2`
 - Automatic header dependency tracking via `-MMD -MP`
-- Optimized for local CPU: `-march=native` (for fuzzing performance)
+- 32-bit builds use `-march=i686`; 64-bit builds use `-march=x86-64`
+
+**Coverage Notes:**
+- `LL_AFL_BB_COVERAGE=1` enables AFL-style basic-block coverage inside loaded DLLs.
+- `LL_PE_FIXED_BASE=1` keeps mappings stable across runs; use `LL_MAX_IMAGES` to cap instrumentation.
 
 ## Debugging
 

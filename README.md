@@ -18,7 +18,8 @@ EngineScanCallback(): Threat Virus:DOS/EICAR_Test_File identified.
 The `peloader` directory contains a custom PE/COFF loader derived from
 ndiswrapper. The library will process the relocations and imports, then provide
 a `dlopen`-like API. The code supports debugging with gdb (including symbols),
-basic block coverage collection, and runtime hooking and patching.
+basic block coverage collection (PIN), AFL-style basic-block coverage in loaded
+DLLs, and runtime hooking and patching.
 
 ![Is such a thing even possible?](https://media.giphy.com/media/2pDSW8QQU6jRe/giphy.gif)
 
@@ -83,6 +84,25 @@ $ make
 | `libgcc.i686`         | `gcc-multilib`                      |                              |
 | `readline-devel.i686` | `libreadline-dev:i386`              | Optional, used in mpscript.  |
 | `cabextract`          | `cabextract`                        | Used to extract definitions. |
+
+### Capstone (Disassembler)
+
+Capstone is bundled as a submodule under `third_party/capstone`. The top-level
+Makefile builds static libraries for both architectures:
+
+- `third_party/capstone/libcapstone32.a` with `-m32`
+- `third_party/capstone/libcapstone64.a` with `-m64`
+
+Override the location with `CAPSTONE_DIR=/path/to/capstone`.
+
+After cloning, initialize the submodule:
+
+```
+git submodule update --init --recursive
+```
+
+The top-level `make` target builds Capstone automatically; use `make capstone`
+to build just the disassembler libraries.
 
 You will need to download the 32-bit antimalware update file from this page:
 
@@ -508,9 +528,35 @@ while (__AFL_LOOP(10000)) {
 harness code, not the Windows DLL. For coverage-guided fuzzing of the DLL
 itself, consider:
 
+- **AFL BB coverage mode** (`LL_AFL_BB_COVERAGE=1`) - In-process AFL-style basic
+  block edge coverage inside loaded DLLs. Use `LL_PE_FIXED_BASE=1` for stable
+  maps and `LL_MAX_IMAGES` to cap instrumentation. This differs from callsite
+  coverage (DLL-to-stub transitions) by updating the map at every basic-block
+  entry in the DLL.
 - **Intel PIN** - Use `coverage/deepcover.cpp` for offline corpus distillation
 - **AFL++ Frida mode** (`-O` flag) - Runtime instrumentation, slower but covers DLL code
 - **Intel PT** - Hardware tracing on supported CPUs
+
+### BB Coverage Sanity Checks
+
+After enabling `LL_AFL_BB_COVERAGE=1`, basic-block coverage should change even
+when the DLL never calls WinAPI stubs. A quick sanity check:
+
+```
+export LL_AFL_BB_COVERAGE=1
+export LL_PE_FIXED_BASE=1
+
+printf '\\x01' | afl-showmap -q -o /dev/null -- ./harness32
+printf '\\x02' | afl-showmap -q -o /dev/null -- ./harness32
+```
+
+For corpus minimization (32-bit) with large maps:
+
+```
+export AFL_MAP_SIZE=8388608
+export AFL_NO_FORKSRV=1
+afl-cmin -i corpus -o min -- ./harness32 @@
+```
 
 See `test/afl_persistent.c` and `test/afl_persistent64.c` for the full
 implementation.
@@ -612,4 +658,3 @@ if (strcasecmp(dll, "MYDLL.dll") == 0 || strcasecmp(dll, "MYDLL") == 0) {
 ## License
 
 GPL2
-

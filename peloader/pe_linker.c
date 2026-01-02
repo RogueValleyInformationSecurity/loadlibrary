@@ -40,6 +40,7 @@
 #include "ntoskernel.h"
 #include "util.h"
 #include "log.h"
+#include "afl_bb_coverage.h"
 
 struct pe_exports {
         char *dll;
@@ -299,23 +300,23 @@ static const char* resolve_oleaut32_ordinal(int ordinal)
         return NULL;
 }
 
+static void ordinal_import_stub(void)
+{
+        warnx("function at %p attempted to call a symbol imported by ordinal", __builtin_return_address(0));
+        __debugbreak();
+}
+
+static void unknown_symbol_stub(void)
+{
+        warnx("function at %p attempted to call an unknown symbol", __builtin_return_address(0));
+        __debugbreak();
+}
+
 static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int is_64bit)
 {
         char *symname = NULL;
         int i;
         generic_func adr;
-
-        void ordinal_import_stub(void)
-        {
-            warnx("function at %p attempted to call a symbol imported by ordinal", __builtin_return_address(0));
-            __debugbreak();
-        }
-
-        void unknown_symbol_stub(void)
-        {
-            warnx("function at %p attempted to call an unknown symbol", __builtin_return_address(0));
-            __debugbreak();
-        }
 
         if (is_64bit) {
                 /* 64-bit: use IMAGE_THUNK_DATA64 */
@@ -566,16 +567,35 @@ static int fix_pe_image(struct pe_image *pe)
 
         image_base = PE_IMAGE_BASE(pe);
 
-        // TODO: If image does not have DYNAMIC_BASE, add MAP_FIXED.
-        // For 64-bit images, we can't map at the preferred base (usually > 4GB)
-        // so we always let the OS choose the address.
+        // LL_PE_FIXED_BASE=1 forces a fixed base mapping for stable coverage maps.
+        // Without it we treat the preferred base as a hint (32-bit only).
+        void *desired = NULL;
+        int mmap_flags = MAP_ANONYMOUS | MAP_PRIVATE;
+        bool fixed_base = false;
+        const char *fixed_env = getenv("LL_PE_FIXED_BASE");
 
-        image = mmap(pe->is_64bit ? NULL : (PVOID)(uintptr_t)image_base,
-                          image_size + getpagesize(),
-                          PROT_READ | PROT_WRITE | PROT_EXEC,
-                          MAP_ANONYMOUS | MAP_PRIVATE,
-                          -1,
-                          0);
+        if (fixed_env != NULL && atoi(fixed_env) > 0) {
+                fixed_base = true;
+        }
+
+        if (fixed_base) {
+#ifdef MAP_FIXED_NOREPLACE
+                desired = (PVOID)(uintptr_t)image_base;
+                mmap_flags |= MAP_FIXED_NOREPLACE;
+#else
+                ERROR("LL_PE_FIXED_BASE requested but MAP_FIXED_NOREPLACE is unavailable");
+                return -ENOTSUP;
+#endif
+        } else if (!pe->is_64bit) {
+                desired = (PVOID)(uintptr_t)image_base;
+        }
+
+        image = mmap(desired,
+                     image_size + getpagesize(),
+                     PROT_READ | PROT_WRITE | PROT_EXEC,
+                     mmap_flags,
+                     -1,
+                     0);
 
         if (image == MAP_FAILED) {
                 ERROR("failed to mmap desired space for image: %zu bytes, image base %#llx, %m",
@@ -679,6 +699,8 @@ int link_pe_images(struct pe_image *pe_image, unsigned short n)
                         TRACE1("fixup imports failed");
                         return -EINVAL;
                 }
+
+                afl_bb_coverage_instrument(pe);
 
                 /* Get entry point using architecture-appropriate field */
                 pe->entry = RVA2VA(pe->image,
