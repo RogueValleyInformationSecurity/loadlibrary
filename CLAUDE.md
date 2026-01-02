@@ -18,6 +18,10 @@ make clean
 # Build individual components
 make -C peloader all    # PE loader library
 make -C intercept all   # Hook/interception library
+
+# Build AFL-style PE callsite coverage harnesses
+AFL_PE_COVERAGE=1 make -C peloader all all64
+AFL_PE_COVERAGE=1 make afl_cov afl_cov64
 ```
 
 **Required 32-bit dependencies:**
@@ -33,6 +37,18 @@ make -C intercept all   # Hook/interception library
 # Interactive scripting interface (requires readline)
 ./mpscript
 ```
+
+**AFL-style PE callsite coverage (standalone sanity check):**
+
+```bash
+export LL_AFL_COVERAGE=1
+export LL_AFL_COVERAGE_STATS=1
+export LL_PE_FIXED_BASE=0x40000000
+printf "A" | ./afl_cov64
+```
+
+For 32-bit `afl-cmin` runs, set `AFL_MAP_SIZE=8388608` and `AFL_NO_FORKSRV=1`
+to match AFL++ map sizing in batch mode.
 
 Before running, extract the Windows Defender engine files into `engine/` directory:
 ```bash
@@ -57,6 +73,8 @@ cabextract mpam-fe.exe   # Downloads from Microsoft's definition update page
 
 - `mpclient.c` - Main loader application for Windows Defender
 - `mpscript.c` - Interactive REPL interface
+- `peloader/afl_coverage.c` - AFL-style callsite coverage for PE -> loader calls
+- `examples/afl_coverage_harness.c` - Example harness that prints coverage stats
 
 **Key Design Constraints:**
 - Supports both 32-bit (PE32) and 64-bit (PE32+) Windows PE files
@@ -68,7 +86,7 @@ cabextract mpam-fe.exe   # Downloads from Microsoft's definition update page
 - Compiler warnings enabled: `-Wall -Wextra -Wno-multichar`
 - Security hardening: `-fstack-protector-strong -D_FORTIFY_SOURCE=2`
 - Automatic header dependency tracking via `-MMD -MP`
-- Optimized for local CPU: `-march=native` (for fuzzing performance)
+- Baseline ISA for compatibility: `-march=i686` (32-bit), `-march=x86-64` (64-bit)
 
 ## Debugging
 

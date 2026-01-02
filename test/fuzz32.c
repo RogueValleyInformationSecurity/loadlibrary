@@ -1,18 +1,37 @@
 // Example 32-bit DLL for fuzzing demonstration
-// Compile with: i686-w64-mingw32-gcc -shared -nostdlib -e _DllMainCRTStartup -o fuzz32.dll fuzz32.c
+// Compile with: i686-w64-mingw32-gcc -shared -nostdlib -e _DllMainCRTStartup -o fuzz32.dll fuzz32.c -lkernel32
 #include <stdint.h>
 
 #ifdef _WIN32
 #define EXPORT __declspec(dllexport)
+#define DLLIMPORT __declspec(dllimport)
+#define STDCALL __stdcall
+#define IMPORT_NAME(name)
 #else
 #define EXPORT
+#define DLLIMPORT
+#define STDCALL
+#define IMPORT_NAME(name)
 #endif
+
+// Windows API imports used to exercise loader callsite coverage.
+DLLIMPORT uint32_t STDCALL GetTickCount(void) IMPORT_NAME(GetTickCount);
+DLLIMPORT uint32_t STDCALL GetCurrentProcessId(void) IMPORT_NAME(GetCurrentProcessId);
 
 // Simple buffer parser - simulates parsing logic that could have bugs
 // Returns: number of "records" found, or -1 on error
 EXPORT int parse_records(const uint8_t *data, int size) {
     int count = 0;
     int i = 0;
+    uint32_t api_hint = 0;
+
+    if (size > 0) {
+        if (data[0] == 'A') {
+            api_hint = GetTickCount();
+        } else if (data[0] == 'B') {
+            api_hint = GetCurrentProcessId();
+        }
+    }
 
     while (i < size) {
         // Each "record" starts with a length byte
@@ -28,7 +47,7 @@ EXPORT int parse_records(const uint8_t *data, int size) {
         count++;
     }
 
-    return count;
+    return count ^ (int)(api_hint & 0xff);
 }
 
 // Checksum function - another simple example
@@ -49,7 +68,11 @@ EXPORT int __stdcall DllMain(void *hinstDLL, uint32_t fdwReason, void *lpvReserv
     return 1;
 }
 
-// Entry point for -nostdlib (use cdecl to avoid name decoration)
-int __attribute__((cdecl)) _DllMainCRTStartup(void *hinstDLL, uint32_t fdwReason, void *lpvReserved) {
+// Entry point for -nostdlib
+// Use asm label to get the exact symbol name without stdcall mangling
+int __stdcall _DllMainCRTStartup(void *hinstDLL, uint32_t fdwReason, void *lpvReserved)
+    __asm__("_DllMainCRTStartup");
+
+int __stdcall _DllMainCRTStartup(void *hinstDLL, uint32_t fdwReason, void *lpvReserved) {
     return DllMain(hinstDLL, fdwReason, lpvReserved);
 }

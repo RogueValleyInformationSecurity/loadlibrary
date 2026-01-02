@@ -40,6 +40,7 @@
 #include "ntoskernel.h"
 #include "util.h"
 #include "log.h"
+#include "afl_coverage.h"
 
 struct pe_exports {
         char *dll;
@@ -299,9 +300,36 @@ static const char* resolve_oleaut32_ordinal(int ordinal)
         return NULL;
 }
 
+static const char *normalize_import_name(const char *symname, char *buf, size_t buf_len)
+{
+        if (!symname || !buf || buf_len == 0) {
+                return NULL;
+        }
+
+        const char *name = symname;
+        if (name[0] == '_') {
+                name++;
+        }
+
+        size_t len = strcspn(name, "@");
+        if (len == 0 || len >= buf_len) {
+                return NULL;
+        }
+
+        memcpy(buf, name, len);
+        buf[len] = '\0';
+
+        if (strcmp(buf, symname) == 0) {
+                return NULL;
+        }
+
+        return buf;
+}
+
 static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int is_64bit)
 {
         char *symname = NULL;
+        char altname[128];
         int i;
         generic_func adr;
 
@@ -344,12 +372,15 @@ static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int i
                         }
 
                         if (get_export(symname, &adr) < 0) {
-                                ERROR("unknown symbol: %s:%s", dll, symname);
-                                address_tbl[i] = (ULONGLONG)(uintptr_t)unknown_symbol_stub;
-                                continue;
-                        } else {
-                                address_tbl[i] = (ULONGLONG)(uintptr_t)adr;
+                                const char *demangled = normalize_import_name(symname, altname, sizeof(altname));
+                                if (!demangled || get_export(demangled, &adr) < 0) {
+                                        ERROR("unknown symbol: %s:%s", dll, symname);
+                                        address_tbl[i] = (ULONGLONG)(uintptr_t)unknown_symbol_stub;
+                                        continue;
+                                }
                         }
+
+                        address_tbl[i] = (ULONGLONG)(uintptr_t)adr;
                 }
         } else {
                 /* 32-bit: use IMAGE_THUNK_DATA32 */
@@ -378,12 +409,15 @@ static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int i
                         }
 
                         if (get_export(symname, &adr) < 0) {
-                                ERROR("unknown symbol: %s:%s", dll, symname);
-                                address_tbl[i] = (DWORD)(uintptr_t)unknown_symbol_stub;
-                                continue;
-                        } else {
-                                address_tbl[i] = (DWORD)(uintptr_t)adr;
+                                const char *demangled = normalize_import_name(symname, altname, sizeof(altname));
+                                if (!demangled || get_export(demangled, &adr) < 0) {
+                                        ERROR("unknown symbol: %s:%s", dll, symname);
+                                        address_tbl[i] = (DWORD)(uintptr_t)unknown_symbol_stub;
+                                        continue;
+                                }
                         }
+
+                        address_tbl[i] = (DWORD)(uintptr_t)adr;
                 }
         }
 
@@ -558,28 +592,48 @@ static int fix_pe_image(struct pe_image *pe)
         ULONGLONG image_base;
 
         image_size = PE_OPT_HDR_FIELD(pe, SizeOfImage);
+        image_base = PE_IMAGE_BASE(pe);
 
-        if (pe->size == image_size) {
+        uintptr_t fixed_base = 0;
+        bool use_fixed = afl_coverage_get_fixed_base(image_base, &fixed_base);
+
+        if (pe->size == image_size && !use_fixed) {
                 /* Nothing to do */
                 return 0;
         }
 
-        image_base = PE_IMAGE_BASE(pe);
+        // When AFL PE coverage is enabled, prefer a deterministic base.
+        void *map_addr = pe->is_64bit ? NULL : (PVOID)(uintptr_t)image_base;
+        int map_flags = MAP_ANONYMOUS | MAP_PRIVATE;
 
-        // TODO: If image does not have DYNAMIC_BASE, add MAP_FIXED.
-        // For 64-bit images, we can't map at the preferred base (usually > 4GB)
-        // so we always let the OS choose the address.
+        if (use_fixed) {
+                map_addr = (PVOID)(uintptr_t)fixed_base;
+                int fixed_flag = afl_coverage_map_fixed_flag();
+                if (fixed_flag) {
+                        map_flags |= fixed_flag;
+                }
+        }
 
-        image = mmap(pe->is_64bit ? NULL : (PVOID)(uintptr_t)image_base,
+        image = mmap(map_addr,
                           image_size + getpagesize(),
                           PROT_READ | PROT_WRITE | PROT_EXEC,
-                          MAP_ANONYMOUS | MAP_PRIVATE,
+                          map_flags,
                           -1,
                           0);
 
         if (image == MAP_FAILED) {
-                ERROR("failed to mmap desired space for image: %zu bytes, image base %#llx, %m",
-                    image_size, image_base);
+                ULONGLONG desired_base = use_fixed ? (ULONGLONG)fixed_base : image_base;
+                TRACE1("failed to mmap desired space for image: %zu bytes, image base %#llx, %m",
+                    image_size, (unsigned long long)desired_base);
+                return -ENOMEM;
+        }
+
+        if (use_fixed && image != map_addr) {
+                TRACE1("fixed mapping requested but got %p (wanted %p). "
+                       "Set LL_PE_FIXED_BASE to a free address or allow MAP_FIXED "
+                       "with LL_AFL_ALLOW_MAP_FIXED=1 on older kernels.",
+                       image, map_addr);
+                munmap(image, image_size + getpagesize());
                 return -ENOMEM;
         }
 
@@ -657,10 +711,12 @@ int link_pe_images(struct pe_image *pe_image, unsigned short n)
                         return -EINVAL;
                 }
 
-                if (fix_pe_image(pe)) {
+        if (fix_pe_image(pe)) {
                         TRACE1("bad PE image");
                         return -EINVAL;
                 }
+
+                afl_coverage_register_image(pe->image, pe->size);
 
                 if (read_exports(pe)) {
                         TRACE1("read exports failed");

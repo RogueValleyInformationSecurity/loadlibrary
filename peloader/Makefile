@@ -15,6 +15,13 @@ LDFLAGS64 = $(CFLAGS64) -m64 -lm
 
 .PHONY: clean all64
 
+# Enable AFL-style PE callsite coverage when requested.
+ifneq ($(AFL_PE_COVERAGE),)
+ifneq ($(AFL_PE_COVERAGE),0)
+COMMON_CFLAGS += -finstrument-functions
+endif
+endif
+
 # This glob matches all the winapi exports we provide.
 WINAPI  = $(patsubst %.c,%.o,$(wildcard winapi/*.c))
 WINAPI64 = $(patsubst %.c,%.64.o,$(wildcard winapi/*.c))
@@ -29,14 +36,14 @@ all: $(TARGETS)
 all64: $(TARGETS64)
 
 # 32-bit build rules
-libpeloader.a: $(WINAPI) winstrings.o pe_linker.o crt.o log.o util.o extra.o
+libpeloader.a: $(WINAPI) winstrings.o pe_linker.o crt.o log.o util.o extra.o afl_coverage.o
 	$(AR) $(ARFLAGS) $@ $^
 
 # 64-bit build rules
 %.64.o: %.c
 	$(CC) $(CFLAGS64) $(CPPFLAGS) -c -o $@ $<
 
-libpeloader64.a: $(WINAPI64) winstrings.64.o pe_linker.64.o crt.64.o log.64.o util.64.o extra.64.o
+libpeloader64.a: $(WINAPI64) winstrings.64.o pe_linker.64.o crt.64.o log.64.o util.64.o extra.64.o afl_coverage.64.o
 	$(AR) $(ARFLAGS) $@ $^
 
 clean:

@@ -508,12 +508,72 @@ while (__AFL_LOOP(10000)) {
 harness code, not the Windows DLL. For coverage-guided fuzzing of the DLL
 itself, consider:
 
+- **Loadlibrary AFL callsite coverage** - See the section below for the
+  built-in AFL-style coverage map based on PE callsites into the loader.
 - **Intel PIN** - Use `coverage/deepcover.cpp` for offline corpus distillation
 - **AFL++ Frida mode** (`-O` flag) - Runtime instrumentation, slower but covers DLL code
 - **Intel PT** - Hardware tracing on supported CPUs
 
 See `test/afl_persistent.c` and `test/afl_persistent64.c` for the full
 implementation.
+
+### AFL-Style PE Callsite Coverage
+
+This fork can emit AFL-style coverage for **PE callsites into the loader**
+(imported Windows API stubs). This makes standard AFL++ instrumentation usable
+without QEMU/Frida, as long as the target DLL calls into the loader.
+
+**Build:**
+
+```bash
+# Build peloader with callsite coverage enabled
+AFL_PE_COVERAGE=1 make -C peloader all all64
+
+# Build the example harnesses
+AFL_PE_COVERAGE=1 make afl_cov afl_cov64
+```
+
+**Run (standalone sanity check):**
+
+```bash
+export LL_AFL_COVERAGE=1
+export LL_AFL_COVERAGE_STATS=1
+
+# 64-bit example
+export LL_PE_FIXED_BASE=0x40000000
+printf "A" | ./afl_cov64
+printf "B" | ./afl_cov64
+
+# 32-bit example (fuzz32.dll ImageBase)
+export LL_PE_FIXED_BASE=0x64540000
+printf "A" | ./afl_cov
+```
+
+**Run with AFL++:**
+
+```bash
+export LL_PE_FIXED_BASE=0x40000000
+afl-fuzz -i corpus -o findings -- ./afl_cov64 path/to/target.dll
+```
+
+**AFL++ corpus minimization (32-bit):**
+
+```bash
+# afl-cmin uses afl-showmap batch mode; 32-bit needs the map size and no-forkserver.
+export LL_PE_FIXED_BASE=0x64540000
+export AFL_MAP_SIZE=8388608
+export AFL_NO_FORKSRV=1
+afl-cmin -m none -i corpus -o findings -- ./afl_cov path/to/target.dll
+```
+
+**Notes:**
+
+- Coverage tracks **PE -> loader callsites**, not every basic block inside the DLL.
+- The loader enforces a deterministic image base when coverage is enabled.
+  Use `LL_PE_FIXED_BASE` if the preferred base is occupied.
+- You can find a DLL's ImageBase with `objdump -x path/to.dll | rg ImageBase`.
+- On kernels without `MAP_FIXED_NOREPLACE`, set `LL_AFL_ALLOW_MAP_FIXED=1`
+  to permit fixed mapping.
 
 ## Adding Ordinal Import Support
 
@@ -612,4 +672,3 @@ if (strcasecmp(dll, "MYDLL.dll") == 0 || strcasecmp(dll, "MYDLL") == 0) {
 ## License
 
 GPL2
-
