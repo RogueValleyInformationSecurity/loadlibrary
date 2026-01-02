@@ -4,5 +4,6 @@
 #include <stdint.h>
 
 void afl_coverage_hit_pc(uintptr_t pc) __attribute__((no_instrument_function));
+void afl_coverage_expand_map(void) __attribute__((no_instrument_function));
 
 #endif

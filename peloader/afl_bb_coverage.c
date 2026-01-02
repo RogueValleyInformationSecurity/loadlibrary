@@ -66,6 +66,20 @@ static bool bb_enabled(void)
     return enabled != 0;
 }
 
+static bool bb_verbose(void)
+{
+    static int enabled = -1;
+    const char *env;
+
+    if (enabled != -1) {
+        return enabled != 0;
+    }
+
+    env = getenv("LL_AFL_BB_VERBOSE");
+    enabled = (env != NULL && atoi(env) > 0) ? 1 : 0;
+    return enabled != 0;
+}
+
 static unsigned int bb_max_images(void)
 {
     static unsigned int max_images = 0;
@@ -837,11 +851,12 @@ static bool build_trampoline_x64(csh handle, cs_insn *insn, uint8_t *tramp,
         p = emit_u8(p, 0xE9);
         p = emit_u32(p, (uint32_t)rel);
     } else {
-        p = emit_u8(p, 0x48);
-        p = emit_u8(p, 0xB8);
-        p = emit_u64(p, src_addr + patch_len);
+        // Absolute jump via RIP-relative pointer (preserves registers).
+        // jmp qword ptr [rip+0]; dq addr
         p = emit_u8(p, 0xFF);
-        p = emit_u8(p, 0xE0);
+        p = emit_u8(p, 0x25);
+        p = emit_u32(p, 0);
+        p = emit_u64(p, src_addr + patch_len);
     }
 
     return true;
@@ -851,7 +866,7 @@ static bool patch_block_x86(csh handle, cs_insn *insn, struct tramp_pool *pool,
                             const uint8_t *image, uint32_t rva,
                             const struct code_range *ranges, size_t range_idx,
                             const uint32_t *sorted_blocks, size_t block_index,
-                            size_t block_count)
+                            size_t block_count, size_t *patch_size_out)
 {
     const uint8_t *src = image + rva;
     uint64_t src_addr = (uint64_t)(uintptr_t)src;
@@ -902,6 +917,9 @@ static bool patch_block_x86(csh handle, cs_insn *insn, struct tramp_pool *pool,
         memset(dst + patch_size, 0x90, patch_len - patch_size);
     }
 
+    if (patch_size_out != NULL) {
+        *patch_size_out = patch_size;
+    }
     return true;
 }
 
@@ -909,7 +927,7 @@ static bool patch_block_x64(csh handle, cs_insn *insn, struct tramp_pool *pool,
                             const uint8_t *image, uint32_t rva,
                             const struct code_range *ranges, size_t range_idx,
                             const uint32_t *sorted_blocks, size_t block_index,
-                            size_t block_count)
+                            size_t block_count, size_t *patch_size_out)
 {
     const uint8_t *src = image + rva;
     uint64_t src_addr = (uint64_t)(uintptr_t)src;
@@ -984,20 +1002,25 @@ static bool patch_block_x64(csh handle, cs_insn *insn, struct tramp_pool *pool,
         dst[0] = 0xE9;
         memcpy(dst + 1, &rel, sizeof(int32_t));
     } else {
+        // Absolute jump via RIP-relative pointer (preserves registers).
+        // jmp qword ptr [rip+0]; dq addr
         uint64_t tramp_addr = (uint64_t)(uintptr_t)tramp;
-        dst[0] = 0x48;
-        dst[1] = 0xB8;
-        memcpy(dst + 2, &tramp_addr, sizeof(tramp_addr));
-        dst[10] = 0xFF;
-        dst[11] = 0xE0;
-        dst[12] = 0x90;
-        dst[13] = 0x90;
+        dst[0] = 0xFF;
+        dst[1] = 0x25;
+        dst[2] = 0x00;
+        dst[3] = 0x00;
+        dst[4] = 0x00;
+        dst[5] = 0x00;
+        memcpy(dst + 6, &tramp_addr, sizeof(tramp_addr));
     }
 
     if (patch_len > patch_size) {
         memset(dst + patch_size, 0x90, patch_len - patch_size);
     }
 
+    if (patch_size_out != NULL) {
+        *patch_size_out = patch_size;
+    }
     return true;
 }
 
@@ -1029,10 +1052,15 @@ void afl_bb_coverage_instrument(struct pe_image *pe)
     uint32_t entry_rva;
     unsigned int max_images;
     uint32_t rva;
+    size_t patched = 0;
+    size_t failed = 0;
+    size_t far = 0;
 
     if (!bb_enabled()) {
         return;
     }
+
+    afl_coverage_expand_map();
 
     max_images = bb_max_images();
     if (instrumented >= max_images) {
@@ -1083,6 +1111,10 @@ void afl_bb_coverage_instrument(struct pe_image *pe)
 
     add_export_seeds(pe, ranges, range_count, &queue);
     add_tls_seeds(pe, ranges, range_count, &queue);
+
+    if (bb_verbose()) {
+        l_message("bbcov: image=%p ranges=%zu 64bit=%d", pe->image, range_count, pe->is_64bit ? 1 : 0);
+    }
 
     while (rva_queue_pop(&queue, &rva)) {
         size_t range_idx;
@@ -1160,21 +1192,42 @@ void afl_bb_coverage_instrument(struct pe_image *pe)
             return;
         }
 
+        if (bb_verbose() && pool.count > 0) {
+            int64_t delta = (int64_t)(uintptr_t)pool.regions[0].base - (int64_t)pool.image_base;
+            l_message("bbcov: tramp_base=%p delta=%lld rel32=%d blocks=%zu",
+                      pool.regions[0].base, (long long)delta, is_rel32(delta) ? 1 : 0, blocks.count);
+        }
+
         for (i = 0; i < blocks.count; i++) {
             size_t range_idx;
+            size_t patch_size = 0;
+            bool ok = false;
 
             if (!rva_in_ranges(ranges, range_count, blocks.items[i], &range_idx)) {
                 continue;
             }
 
             if (pe->is_64bit) {
-                patch_block_x64(handle, insn, &pool, pe->image, blocks.items[i],
-                                ranges, range_idx, blocks.items, i, blocks.count);
+                ok = patch_block_x64(handle, insn, &pool, pe->image, blocks.items[i],
+                                     ranges, range_idx, blocks.items, i, blocks.count, &patch_size);
+                if (ok && patch_size == 14) {
+                    far++;
+                }
             } else {
-                patch_block_x86(handle, insn, &pool, pe->image, blocks.items[i],
-                                ranges, range_idx, blocks.items, i, blocks.count);
+                ok = patch_block_x86(handle, insn, &pool, pe->image, blocks.items[i],
+                                     ranges, range_idx, blocks.items, i, blocks.count, &patch_size);
+            }
+
+            if (ok) {
+                patched++;
+            } else {
+                failed++;
             }
         }
+    }
+
+    if (bb_verbose()) {
+        l_message("bbcov: patched=%zu failed=%zu far=%zu", patched, failed, far);
     }
 
     tramp_pool_free(&pool);

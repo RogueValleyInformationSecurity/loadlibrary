@@ -44,13 +44,13 @@ STATIC BOOL WINAPI TlsSetValue(DWORD dwTlsIndex, PVOID lpTlsValue)
     return FALSE;
 }
 
-STATIC DWORD WINAPI TlsGetValue(DWORD dwTlsIndex)
+STATIC PVOID WINAPI TlsGetValue(DWORD dwTlsIndex)
 {
     if (dwTlsIndex < ARRAY_SIZE(LocalStorage)) {
-        return LocalStorage[dwTlsIndex];
+        return (PVOID)LocalStorage[dwTlsIndex];
     }
 
-    return 0;
+    return NULL;
 }
 
 STATIC BOOL WINAPI TlsFree(DWORD dwTlsIndex)
@@ -83,7 +83,7 @@ static DWORD WINAPI FlsSetValue(DWORD dwFlsIndex, PVOID lpFlsData)
     return TlsSetValue(dwFlsIndex, lpFlsData);
 }
 
-static DWORD WINAPI FlsGetValue(DWORD dwFlsIndex)
+static PVOID WINAPI FlsGetValue(DWORD dwFlsIndex)
 {
     DebugLog("%#x", dwFlsIndex);
 

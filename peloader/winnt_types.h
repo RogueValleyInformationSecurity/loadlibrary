@@ -134,15 +134,16 @@
 #define wfastcall __attribute__((fastcall))
 #define STATIC static
 #define VOID void
-#define WINAPI __attribute__((__stdcall__))
 
 // Architecture-aware calling convention for Windows DLL functions
 // On 64-bit Linux calling Windows code, use Microsoft ABI (RCX, RDX, R8, R9)
 // On 32-bit, stdcall is compatible between Linux and Windows
 #if defined(__x86_64__) || defined(__amd64__)
 #define WINCALL __attribute__((ms_abi))
+#define WINAPI __attribute__((ms_abi))
 #else
 #define WINCALL __attribute__((__stdcall__))
+#define WINAPI __attribute__((__stdcall__))
 #endif
 
 #define KI_USER_SHARED_DATA 0xffdf0000

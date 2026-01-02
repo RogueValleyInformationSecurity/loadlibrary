@@ -300,23 +300,23 @@ static const char* resolve_oleaut32_ordinal(int ordinal)
         return NULL;
 }
 
+static void ordinal_import_stub(void)
+{
+        warnx("function at %p attempted to call a symbol imported by ordinal", __builtin_return_address(0));
+        __debugbreak();
+}
+
+static void unknown_symbol_stub(void)
+{
+        warnx("function at %p attempted to call an unknown symbol", __builtin_return_address(0));
+        __debugbreak();
+}
+
 static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int is_64bit)
 {
         char *symname = NULL;
         int i;
         generic_func adr;
-
-        void ordinal_import_stub(void)
-        {
-            warnx("function at %p attempted to call a symbol imported by ordinal", __builtin_return_address(0));
-            __debugbreak();
-        }
-
-        void unknown_symbol_stub(void)
-        {
-            warnx("function at %p attempted to call an unknown symbol", __builtin_return_address(0));
-            __debugbreak();
-        }
 
         if (is_64bit) {
                 /* 64-bit: use IMAGE_THUNK_DATA64 */

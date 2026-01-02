@@ -18,6 +18,21 @@
 #include "util.h"
 #include "winstrings.h"
 
+static int randomfd = -1;
+
+static void __attribute__((constructor)) crypt_random_init(void)
+{
+    randomfd = open("/dev/urandom", O_RDONLY);
+}
+
+static void __attribute__((destructor)) crypt_random_fini(void)
+{
+    if (randomfd >= 0) {
+        close(randomfd);
+        randomfd = -1;
+    }
+}
+
 typedef struct _CRYPT_BIT_BLOB {
   DWORD cbData;
   BYTE  *pbData;
@@ -92,22 +107,16 @@ static NTSTATUS WINAPI BCryptCloseAlgorithmProvider(HANDLE hAlgorithm, ULONG dwF
 
 static NTSTATUS WINAPI BCryptGenRandom(PVOID phAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer, ULONG dwFlags)
 {
-    static int randomfd = -1;
+    DebugLog("%p, %p, %lu, %#x [fd=%d]", phAlgorithm, pbBuffer, cbBuffer, dwFlags, randomfd);
 
-    void __constructor init()
-    {
+    if (randomfd < 0) {
         randomfd = open("/dev/urandom", O_RDONLY);
     }
 
-    void __destructor fini()
-    {
-        close(randomfd);
-    }
-
-    DebugLog("%p, %p, %lu, %#x [fd=%d]", phAlgorithm, pbBuffer, cbBuffer, dwFlags, randomfd);
-
-    if (read(randomfd, pbBuffer, cbBuffer) != cbBuffer) {
+    if (randomfd >= 0 && read(randomfd, pbBuffer, cbBuffer) != (ssize_t)cbBuffer) {
         DebugLog("failed to generate random data, %m");
+    } else if (randomfd < 0) {
+        memset(pbBuffer, 0, cbBuffer);
     }
 
     return STATUS_SUCCESS;
@@ -322,4 +331,3 @@ DECLARE_CRT_EXPORT("CryptGetHashParam", CryptGetHashParam);
 DECLARE_CRT_EXPORT("CryptSetHashParam", CryptSetHashParam);
 DECLARE_CRT_EXPORT("CryptVerifySignatureW", CryptVerifySignatureW);
 DECLARE_CRT_EXPORT("CryptDestroyHash", CryptDestroyHash);
-
