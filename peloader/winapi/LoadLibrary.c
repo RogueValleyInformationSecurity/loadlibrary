@@ -14,6 +14,11 @@
 #include "util.h"
 #include "winstrings.h"
 
+#if defined(__x86_64__)
+#define WINAPI_ALIGN __attribute__((force_align_arg_pointer)) WINAPI
+#else
+#define WINAPI_ALIGN WINAPI
+#endif
 
 static HANDLE WINAPI LoadLibraryExW(PVOID lpFileName, HANDLE hFile, DWORD dwFlags)
 {
@@ -39,11 +44,15 @@ static PVOID WINAPI GetProcAddress(HANDLE hModule, PCHAR lpProcName)
 
     assert(hModule == (HANDLE) NULL || hModule == (HANDLE) 'LOAD' || hModule == (HANDLE) 'MPEN' || hModule == (HANDLE) 'VERS' || hModule == (HANDLE) 'KERN');
 
+    if (lpProcName && strcmp(lpProcName, "CorExitProcess") == 0) {
+        return NULL;
+    }
+
     if (hsearch_r(key, FIND, &item, &crtexports)) {
         return item->data;
     }
 
-    DebugLog("FIXME: %s unresolved", lpProcName);
+    LogMessage("GetProcAddress unresolved: %s (module=%p)", lpProcName, hModule);
 
     return NULL;
 }
@@ -100,6 +109,30 @@ static HANDLE WINAPI GetModuleHandleA(PCHAR lpModuleName)
     return (HANDLE) NULL;
 }
 
+static BOOL WINAPI_ALIGN GetModuleHandleExA(DWORD dwFlags, LPCSTR lpModuleName, HMODULE *phModule)
+{
+    DebugLog("%p flags=%#x", lpModuleName, dwFlags);
+    if (!phModule) {
+        return FALSE;
+    }
+    *phModule = (HMODULE)GetModuleHandleA((PCHAR)lpModuleName);
+    return TRUE;
+}
+
+static BOOL WINAPI_ALIGN GetModuleHandleExW(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE *phModule)
+{
+    DebugLog("%p flags=%#x", lpModuleName, dwFlags);
+    if (!phModule) {
+        return FALSE;
+    }
+    if (dwFlags & 0x00000004) { /* GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS */
+        *phModule = (HMODULE)'MPEN';
+        return TRUE;
+    }
+    *phModule = (HMODULE)GetModuleHandleW((PVOID)lpModuleName);
+    return TRUE;
+}
+
 static VOID WINAPI FreeLibrary(PVOID hLibModule)
 {
     DebugLog("FreeLibrary(%p)", hLibModule);
@@ -111,5 +144,7 @@ DECLARE_CRT_EXPORT("LoadLibraryW", LoadLibraryW);
 DECLARE_CRT_EXPORT("GetProcAddress", GetProcAddress);
 DECLARE_CRT_EXPORT("GetModuleHandleW", GetModuleHandleW);
 DECLARE_CRT_EXPORT("GetModuleHandleA", GetModuleHandleA);
+DECLARE_CRT_EXPORT("GetModuleHandleExA", GetModuleHandleExA);
+DECLARE_CRT_EXPORT("GetModuleHandleExW", GetModuleHandleExW);
 DECLARE_CRT_EXPORT("GetModuleFileNameA", GetModuleFileNameA);
 DECLARE_CRT_EXPORT("GetModuleFileNameW", GetModuleFileNameW);

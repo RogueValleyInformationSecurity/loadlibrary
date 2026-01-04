@@ -23,7 +23,6 @@ typedef struct _SCANSTRUCT {
     DWORD Flags;
     PCHAR FileName;
     CHAR  VirusName[28];
-    DWORD field_28;
     DWORD field_2C;
     DWORD field_30;
     DWORD field_34;
@@ -33,10 +32,10 @@ typedef struct _SCANSTRUCT {
     DWORD field_44;
     DWORD field_48;
     DWORD field_4C;
-    DWORD FileSize;
-    DWORD field_54;
-    DWORD UserPtr;
-    DWORD field_5C;
+    ULONG64 FileSize;
+    ULONG64 UserPtr;
+    DWORD field_60;
+    DWORD field_64;
     PCHAR MaybeFileName2;
     PWCHAR StreamName1;
     PWCHAR StreamName2;
@@ -45,12 +44,11 @@ typedef struct _SCANSTRUCT {
 } SCANSTRUCT, *PSCANSTRUCT;
 
 typedef struct _SCAN_REPLY {
-    DWORD   (*EngineScanCallback)(PSCANSTRUCT this);
+    DWORD   (WINAPI *EngineScanCallback)(PSCANSTRUCT this);
     DWORD   field_4;
-    DWORD   UserPtr;
+    ULONG64 UserPtr;
     DWORD   field_C;
 } SCAN_REPLY, *PSCAN_REPLY;
 
 #pragma pack(pop)
 #endif // __SCANREPLY_H
-

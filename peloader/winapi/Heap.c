@@ -46,14 +46,47 @@ STATIC BOOL WINAPI HeapFree(HANDLE hHeap, DWORD dwFlags, PVOID lpMem)
 {
     // DebugLog("%p, %#x, %p", hHeap, dwFlags, lpMem);
 
+    if (!lpMem || (uintptr_t)lpMem < 0x10000) {
+        return TRUE;
+    }
+
     free(lpMem);
 
     return TRUE;
 }
 
+STATIC BOOL WINAPI HeapDestroy(HANDLE hHeap)
+{
+    DebugLog("%p", hHeap);
+    return TRUE;
+}
+
+STATIC BOOL WINAPI HeapValidate(HANDLE hHeap, DWORD dwFlags, PVOID lpMem)
+{
+    DebugLog("%p, %#x, %p", hHeap, dwFlags, lpMem);
+    return TRUE;
+}
+
+STATIC BOOL WINAPI HeapQueryInformation(HANDLE HeapHandle,
+                                        HEAP_INFORMATION_CLASS HeapInformationClass,
+                                        PVOID HeapInformation,
+                                        SIZE_T HeapInformationLength,
+                                        SIZE_T *ReturnLength)
+{
+    DebugLog("%p, %d, %p, %zu, %p", HeapHandle, HeapInformationClass,
+             HeapInformation, (size_t)HeapInformationLength, ReturnLength);
+    if (ReturnLength) {
+        *ReturnLength = 0;
+    }
+    return TRUE;
+}
 STATIC BOOL WINAPI RtlFreeHeap(PVOID HeapHandle, ULONG Flags, PVOID BaseAddress)
 {
     DebugLog("%p, %#x, %p", HeapHandle, Flags, BaseAddress);
+
+    if (!BaseAddress || (uintptr_t)BaseAddress < 0x10000) {
+        return TRUE;
+    }
 
     free(BaseAddress);
 
@@ -195,6 +228,9 @@ DECLARE_CRT_EXPORT("HeapCreate", HeapCreate);
 DECLARE_CRT_EXPORT("GetProcessHeap", GetProcessHeap);
 DECLARE_CRT_EXPORT("HeapAlloc", HeapAlloc);
 DECLARE_CRT_EXPORT("HeapFree", HeapFree);
+DECLARE_CRT_EXPORT("HeapDestroy", HeapDestroy);
+DECLARE_CRT_EXPORT("HeapValidate", HeapValidate);
+DECLARE_CRT_EXPORT("HeapQueryInformation", HeapQueryInformation);
 DECLARE_CRT_EXPORT("RtlFreeHeap", RtlFreeHeap);
 DECLARE_CRT_EXPORT("RtlSetHeapInformation", RtlSetHeapInformation);
 DECLARE_CRT_EXPORT("HeapSize", HeapSize);

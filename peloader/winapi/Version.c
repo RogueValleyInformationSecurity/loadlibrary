@@ -50,27 +50,44 @@ static DWORD WINAPI RtlGetVersion(PRTL_OSVERSIONINFOEXW lpVersionInformation)
                  lpVersionInformation->dwOSVersionInfoSize);
     }
 
-    // Windows XP
-    lpVersionInformation->dwMajorVersion = 5;
-    lpVersionInformation->dwMinorVersion = 1;
+    // Windows 10
+    lpVersionInformation->dwMajorVersion = 10;
+    lpVersionInformation->dwMinorVersion = 0;
+    lpVersionInformation->dwBuildNumber = 19045;
+    lpVersionInformation->dwPlatformId = 2;
+    lpVersionInformation->wProductType = 1;
 
     return STATUS_SUCCESS;
 }
 
+#define PROCESSOR_ARCHITECTURE_AMD64 9
 #define PROCESSOR_ARCHITECTURE_INTEL 0
 
 static VOID WINAPI GetSystemInfo(LPSYSTEM_INFO lpSystemInfo)
 {
     DebugLog("%p", lpSystemInfo);
 
-    lpSystemInfo->wProcessorArchitecture = PROCESSOR_ARCHITECTURE_INTEL;
+    if (!lpSystemInfo) {
+        return;
+    }
+
+    memset(lpSystemInfo, 0, sizeof(*lpSystemInfo));
+    lpSystemInfo->wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64;
     lpSystemInfo->dwPageSize = 0x1000;
+    lpSystemInfo->dwNumberOfProcessors = 4;
+    lpSystemInfo->dwProcessorType = 8664;
+    lpSystemInfo->dwAllocationGranularity = 0x10000;
 }
 
-static DWORD GetSystemDefaultLCID(void)
+static VOID WINAPI GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo)
+{
+    GetSystemInfo(lpSystemInfo);
+}
+
+static DWORD WINAPI GetSystemDefaultLCID(void)
 {
     DebugLog("");
-    return 0x0800; // I dunno
+    return 0x0409;
 }
 
 static NTSTATUS WINAPI NtQuerySystemInformation(DWORD SystemInformationClass,
@@ -113,11 +130,26 @@ static DWORD WINAPI GetVersionExA(PRTL_OSVERSIONINFOEXW lpVersionInformation)
     return TRUE;
 }
 
+static ULONGLONG WINAPI VerSetConditionMask(ULONGLONG ConditionMask, DWORD TypeMask, BYTE Condition)
+{
+    DebugLog("%#llx, %#x, %#x", (unsigned long long)ConditionMask, TypeMask, Condition);
+    return ConditionMask;
+}
+
+static BOOL WINAPI VerifyVersionInfoW(PVOID lpVersionInfo, DWORD dwTypeMask, ULONGLONG dwlConditionMask)
+{
+    DebugLog("%p, %#x, %#llx", lpVersionInfo, dwTypeMask, (unsigned long long)dwlConditionMask);
+    return TRUE;
+}
+
 
 DECLARE_CRT_EXPORT("GetVersion", GetVersion);
 DECLARE_CRT_EXPORT("GetVersionExA", GetVersionExA);
+DECLARE_CRT_EXPORT("VerSetConditionMask", VerSetConditionMask);
+DECLARE_CRT_EXPORT("VerifyVersionInfoW", VerifyVersionInfoW);
 DECLARE_CRT_EXPORT("RtlGetVersion", RtlGetVersion);
 DECLARE_CRT_EXPORT("GetSystemInfo", GetSystemInfo);
+DECLARE_CRT_EXPORT("GetNativeSystemInfo", GetNativeSystemInfo);
 DECLARE_CRT_EXPORT("GetSystemDefaultLCID", GetSystemDefaultLCID);
 DECLARE_CRT_EXPORT("NtQuerySystemInformation", NtQuerySystemInformation);
 DECLARE_CRT_EXPORT("GetComputerNameExW", GetComputerNameExW);

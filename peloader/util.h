@@ -2,6 +2,8 @@
 #define __UTIL_H
 #pragma once
 
+#include <ucontext.h>
+
 bool IsGdbPresent();
 
 #ifdef __linux__
@@ -12,7 +14,11 @@ bool IsGdbPresent();
 #define __detour
 #define __constructor   __attribute__((constructor))
 #define __destructor    __attribute__((destructor))
+#ifdef NDEBUG
+#define __debugbreak()  do { } while (0)
+#else
 #define __debugbreak()  __asm__("int3")
+#endif
 #define __cdecl         __attribute__((cdecl))
 #define __export        __attribute__ ((externally_visible))
 #define __noinline      __attribute__ ((noinline))
@@ -26,6 +32,8 @@ static inline void *ZeroMemory(void *s, size_t n)
 {
     return memset(s, 0, n);
 }
+
+void nix_2_ms_context_swap(ucontext_t *pNixContext, CONTEXT *pMSContext);
 
 #else
 # warning util.h included twice

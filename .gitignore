@@ -6,11 +6,11 @@
 *.dll
 *.vdm
 *.exe
-mpclient
-avscript
-eicar.com
+/mpclient
+/avscript
+/eicar.com
 .gradle/
 .idea/
-test64
-harness32
-harness64
+/test64
+/harness32
+/harness64

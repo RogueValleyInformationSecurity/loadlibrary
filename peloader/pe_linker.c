@@ -52,6 +52,97 @@ static struct pe_exports *pe_exports;
 static int num_pe_exports;
 PKUSER_SHARED_DATA SharedUserData;
 
+typedef struct _CURDIR {
+        UNICODE_STRING DosPath;
+        HANDLE Handle;
+} CURDIR, *PCURDIR;
+
+typedef struct _RTL_USER_PROCESS_PARAMETERS {
+        ULONG MaximumLength;
+        ULONG Length;
+        ULONG Flags;
+        ULONG DebugFlags;
+        HANDLE ConsoleHandle;
+        ULONG ConsoleFlags;
+        HANDLE StandardInput;
+        HANDLE StandardOutput;
+        HANDLE StandardError;
+        CURDIR CurrentDirectory;
+        UNICODE_STRING DllPath;
+        UNICODE_STRING ImagePathName;
+        UNICODE_STRING CommandLine;
+        PVOID Environment;
+} RTL_USER_PROCESS_PARAMETERS, *PRTL_USER_PROCESS_PARAMETERS;
+
+static RTL_USER_PROCESS_PARAMETERS ProcessParameters;
+static bool ProcessParametersInitialized;
+
+struct unresolved_import {
+        void *iat_entry;
+        const char *dll;
+        const char *name;
+};
+
+static struct unresolved_import *unresolved_imports;
+static size_t unresolved_imports_count;
+static size_t unresolved_imports_capacity;
+
+static void init_process_parameters(RTL_USER_PROCESS_PARAMETERS *params)
+{
+        static wchar_t kEmptyW[] = L"";
+        static wchar_t kImagePathW[] = L"C:\\mpclient_x64.exe";
+        static wchar_t kCommandLineW[] = L"mpclient_x64.exe";
+        static wchar_t kCurrentDirW[] = L"C:\\";
+
+#define SET_UNICODE_STRING_FROM_ARRAY(dest, src)                           \
+        do {                                                               \
+                (dest).Buffer = (src);                                     \
+                (dest).Length = (USHORT)(sizeof(src) - sizeof((src)[0]));  \
+                (dest).MaximumLength = (USHORT)(sizeof(src));              \
+        } while (0)
+
+        memset(params, 0, sizeof(*params));
+        params->MaximumLength = sizeof(*params);
+        params->Length = sizeof(*params);
+        params->Flags = 1; // RTL_USER_PROC_PARAMS_NORMALIZED
+
+        SET_UNICODE_STRING_FROM_ARRAY(params->CurrentDirectory.DosPath, kCurrentDirW);
+        SET_UNICODE_STRING_FROM_ARRAY(params->DllPath, kEmptyW);
+        SET_UNICODE_STRING_FROM_ARRAY(params->ImagePathName, kImagePathW);
+        SET_UNICODE_STRING_FROM_ARRAY(params->CommandLine, kCommandLineW);
+
+#undef SET_UNICODE_STRING_FROM_ARRAY
+}
+
+static void record_unresolved_import(void *iat_entry, const char *dll, const char *name)
+{
+        if (unresolved_imports_count == unresolved_imports_capacity) {
+                size_t new_capacity = unresolved_imports_capacity ? unresolved_imports_capacity * 2 : 64;
+                struct unresolved_import *new_entries = realloc(unresolved_imports,
+                                                                new_capacity * sizeof(*new_entries));
+                if (!new_entries) {
+                        return;
+                }
+                unresolved_imports = new_entries;
+                unresolved_imports_capacity = new_capacity;
+        }
+
+        unresolved_imports[unresolved_imports_count].iat_entry = iat_entry;
+        unresolved_imports[unresolved_imports_count].dll = dll;
+        unresolved_imports[unresolved_imports_count].name = name;
+        unresolved_imports_count++;
+}
+
+static const struct unresolved_import *find_unresolved_import(void *iat_entry)
+{
+        for (size_t i = 0; i < unresolved_imports_count; i++) {
+                if (unresolved_imports[i].iat_entry == iat_entry) {
+                        return &unresolved_imports[i];
+                }
+        }
+        return NULL;
+}
+
 #define DRIVER_NAME "pelinker"
 #define RVA2VA(image, rva, type) (type)(ULONG_PTR)((void *)image + rva)
 
@@ -306,10 +397,60 @@ static void ordinal_import_stub(void)
         __debugbreak();
 }
 
-static void unknown_symbol_stub(void)
+static uintptr_t unknown_symbol_stub(void)
 {
-        warnx("function at %p attempted to call an unknown symbol", __builtin_return_address(0));
+        const struct unresolved_import *imp = NULL;
+        void *return_address = __builtin_return_address(0);
+        uint8_t *call = (uint8_t *)return_address - 6;
+        static void *logged_iat[128];
+        static size_t logged_count;
+        void *iat_entry = NULL;
+
+        if (call[0] == 0xFF && call[1] == 0x15) {
+                /* call qword ptr [rip+disp32] (x86_64) or absolute (x86) */
+#ifdef __x86_64__
+                int32_t rel = *(int32_t *)(call + 2);
+                iat_entry = (uint8_t *)return_address + rel;
+#else
+                iat_entry = *(void **)(call + 2);
+#endif
+                imp = find_unresolved_import(iat_entry);
+        } else if (call[1] == 0xE8) {
+                int32_t rel = *(int32_t *)(call + 2);
+                uint8_t *target = (uint8_t *)return_address + rel;
+
+                if (target[0] == 0xFF && target[1] == 0x25) {
+                        /* jmp qword ptr [rip+disp32] */
+                        int32_t jrel = *(int32_t *)(target + 2);
+                        iat_entry = target + 6 + jrel;
+                        imp = find_unresolved_import(iat_entry);
+                }
+        }
+
+        if (iat_entry) {
+                for (size_t i = 0; i < logged_count; ++i) {
+                        if (logged_iat[i] == iat_entry) {
+                                goto done;
+                        }
+                }
+                if (logged_count < (sizeof(logged_iat) / sizeof(logged_iat[0]))) {
+                        logged_iat[logged_count++] = iat_entry;
+                }
+        }
+
+        if (imp) {
+                warnx("function at %p attempted to call unresolved import %s:%s",
+                      return_address, imp->dll, imp->name);
+        } else {
+                warnx("function at %p attempted to call an unknown symbol", return_address);
+        }
+#ifdef __x86_64__
+done:
+        return 0;
+#else
         __debugbreak();
+        return 0;
+#endif
 }
 
 static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int is_64bit)
@@ -344,13 +485,14 @@ static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int i
                                 symname = RVA2VA(image, ((lookup_tbl[i] & ~IMAGE_ORDINAL_FLAG64) + 2), char *);
                         }
 
-                        if (get_export(symname, &adr) < 0) {
-                                ERROR("unknown symbol: %s:%s", dll, symname);
-                                address_tbl[i] = (ULONGLONG)(uintptr_t)unknown_symbol_stub;
-                                continue;
-                        } else {
-                                address_tbl[i] = (ULONGLONG)(uintptr_t)adr;
-                        }
+                                if (get_export(symname, &adr) < 0) {
+                                        ERROR("unknown symbol: %s:%s", dll, symname);
+                                        address_tbl[i] = (ULONGLONG)(uintptr_t)unknown_symbol_stub;
+                                        record_unresolved_import(&address_tbl[i], dll, symname);
+                                        continue;
+                                } else {
+                                        address_tbl[i] = (ULONGLONG)(uintptr_t)adr;
+                                }
                 }
         } else {
                 /* 32-bit: use IMAGE_THUNK_DATA32 */
@@ -381,6 +523,7 @@ static int import(void *image, IMAGE_IMPORT_DESCRIPTOR *dirent, char *dll, int i
                         if (get_export(symname, &adr) < 0) {
                                 ERROR("unknown symbol: %s:%s", dll, symname);
                                 address_tbl[i] = (DWORD)(uintptr_t)unknown_symbol_stub;
+                                record_unresolved_import(&address_tbl[i], dll, symname);
                                 continue;
                         } else {
                                 address_tbl[i] = (DWORD)(uintptr_t)adr;
@@ -804,6 +947,12 @@ bool setup_nt_threadinfo(PEXCEPTION_HANDLER ExceptionHandler)
         .ThreadLocalStoragePointer  = LocalStorage, // https://github.com/taviso/loadlibrary/issues/65
         .ProcessEnvironmentBlock    = &ProcessEnvironmentBlock,
     };
+
+    if (!ProcessParametersInitialized) {
+        init_process_parameters(&ProcessParameters);
+        ProcessParametersInitialized = true;
+    }
+    ProcessEnvironmentBlock.ProcessParameters = &ProcessParameters;
 
     if (ExceptionHandler) {
         if (ThreadEnvironment.Tib.ExceptionList) {

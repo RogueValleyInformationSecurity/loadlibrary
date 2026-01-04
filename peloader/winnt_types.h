@@ -64,6 +64,9 @@
 #define STATUS_DEVICE_NOT_CONNECTED     0xC000009D
 
 #define STATUS_BUFFER_OVERFLOW          0x80000005
+#define STATUS_LONG_JUMP                0x80000026
+#define STATUS_UNWIND_CONSOLIDATE       0x80000029
+#define STATUS_UNWIND                   0xC0000027
 
 #define SL_PENDING_RETURNED             0x01
 #define SL_INVOKE_ON_CANCEL             0x20
@@ -135,9 +138,9 @@
 #define STATIC static
 #define VOID void
 
-// Architecture-aware calling convention for Windows DLL functions
-// On 64-bit Linux calling Windows code, use Microsoft ABI (RCX, RDX, R8, R9)
-// On 32-bit, stdcall is compatible between Linux and Windows
+// Architecture-aware calling convention for Windows DLL functions.
+// On 64-bit Linux calling Windows code, use Microsoft ABI (RCX, RDX, R8, R9).
+// On 32-bit, stdcall is compatible between Linux and Windows.
 #if defined(__x86_64__) || defined(__amd64__)
 #define WINCALL __attribute__((ms_abi))
 #define WINAPI __attribute__((ms_abi))
@@ -149,8 +152,11 @@
 #define KI_USER_SHARED_DATA 0xffdf0000
 #define MM_SHARED_USER_DATA_VA 0x7ffe0000
 
-typedef uint8_t         BOOLEAN, BOOL;
+typedef uint8_t         BOOLEAN, BOOL, UBYTE;
+typedef BOOL            *PBOOL;
 typedef void            *PVOID;
+typedef void            *LPVOID;
+typedef PVOID           HWND;
 typedef uint8_t         BYTE;
 typedef uint8_t         *PBYTE;
 typedef uint8_t         *LPBYTE;
@@ -171,13 +177,16 @@ typedef uint16_t        WORD;
 typedef int32_t         INT;
 typedef uint32_t        UINT;
 typedef uint32_t        DWORD, *PDWORD;
+typedef DWORD           *LPDWORD;
 typedef int32_t         LONG;
 typedef uint32_t        ULONG;
 typedef uint32_t        *PULONG;
-typedef int64_t         LONGLONG;
+typedef int64_t         LONGLONG, DWORD64, *PDWORD64;
 typedef uint64_t        ULONGLONG, *PULONGLONG;
+typedef ULONGLONG       DWORDLONG;
 typedef uint64_t        ULONGULONG;
 typedef uint64_t        ULONG64;
+typedef ULONG64         *PULONG64;
 typedef uint64_t        QWORD, *PQWORD;
 typedef uint16_t        WCHAR, *PWCHAR;
 typedef HANDLE          *PHANDLE;
@@ -1404,6 +1413,21 @@ typedef struct _EXCEPTION_RECORD {
   ULONG_PTR                ExceptionInformation[EXCEPTION_MAXIMUM_PARAMETERS];
 } EXCEPTION_RECORD, *PEXCEPTION_RECORD;
 
+#ifndef EXCEPTION_CONTINUE_EXECUTION
+#define EXCEPTION_CONTINUE_EXECUTION -1
+#define EXCEPTION_CONTINUE_SEARCH 0
+#define EXCEPTION_EXECUTE_HANDLER 1
+#endif
+
+struct _CONTEXT;
+
+typedef struct _EXCEPTION_POINTERS {
+  struct _EXCEPTION_RECORD *ExceptionRecord;
+  struct _CONTEXT *ContextRecord;
+} EXCEPTION_POINTERS, *PEXCEPTION_POINTERS;
+
+typedef LONG (WINAPI *LPTOP_LEVEL_EXCEPTION_FILTER)(PEXCEPTION_POINTERS ExceptionInfo);
+
 typedef struct _FLOATING_SAVE_AREA {
   DWORD   ControlWord;
   DWORD   StatusWord;
@@ -1416,6 +1440,124 @@ typedef struct _FLOATING_SAVE_AREA {
   DWORD   Cr0NpxState;
 } FLOATING_SAVE_AREA;
 
+#ifdef __x86_64__
+typedef struct _M128A {
+    ULONGLONG Low;
+    LONGLONG High;
+} M128A, *PM128A;
+
+typedef struct _XSAVE_FORMAT {
+    WORD   ControlWord;
+    WORD   StatusWord;
+    BYTE  TagWord;
+    BYTE  Reserved1;
+    WORD   ErrorOpcode;
+    DWORD ErrorOffset;
+    WORD   ErrorSelector;
+    WORD   Reserved2;
+    DWORD DataOffset;
+    WORD   DataSelector;
+    WORD   Reserved3;
+    DWORD MxCsr;
+    DWORD MxCsr_Mask;
+    M128A FloatRegisters[8];
+
+#if defined(_WIN64)
+
+    M128A XmmRegisters[16];
+    BYTE  Reserved4[96];
+
+#else
+
+    M128A XmmRegisters[8];
+    BYTE  Reserved4[224];
+
+#endif
+
+} XSAVE_FORMAT, *PXSAVE_FORMAT;
+
+typedef XSAVE_FORMAT XMM_SAVE_AREA32, *PXMM_SAVE_AREA32;
+
+typedef struct _CONTEXT {
+    DWORD64 P1Home;
+    DWORD64 P2Home;
+    DWORD64 P3Home;
+    DWORD64 P4Home;
+    DWORD64 P5Home;
+    DWORD64 P6Home;
+
+    DWORD ContextFlags;
+    DWORD MxCsr;
+
+    WORD   SegCs;
+    WORD   SegDs;
+    WORD   SegEs;
+    WORD   SegFs;
+    WORD   SegGs;
+    WORD   SegSs;
+    DWORD EFlags;
+
+    DWORD64 Dr0;
+    DWORD64 Dr1;
+    DWORD64 Dr2;
+    DWORD64 Dr3;
+    DWORD64 Dr6;
+    DWORD64 Dr7;
+
+    DWORD64 Rax;
+    DWORD64 Rcx;
+    DWORD64 Rdx;
+    DWORD64 Rbx;
+    DWORD64 Rsp;
+    DWORD64 Rbp;
+    DWORD64 Rsi;
+    DWORD64 Rdi;
+    DWORD64 R8;
+    DWORD64 R9;
+    DWORD64 R10;
+    DWORD64 R11;
+    DWORD64 R12;
+    DWORD64 R13;
+    DWORD64 R14;
+    DWORD64 R15;
+
+    DWORD64 Rip;
+
+    union {
+        XMM_SAVE_AREA32 FltSave;
+        struct {
+            M128A Header[2];
+            M128A Legacy[8];
+            M128A Xmm0;
+            M128A Xmm1;
+            M128A Xmm2;
+            M128A Xmm3;
+            M128A Xmm4;
+            M128A Xmm5;
+            M128A Xmm6;
+            M128A Xmm7;
+            M128A Xmm8;
+            M128A Xmm9;
+            M128A Xmm10;
+            M128A Xmm11;
+            M128A Xmm12;
+            M128A Xmm13;
+            M128A Xmm14;
+            M128A Xmm15;
+        } DUMMYSTRUCTNAME;
+    } DUMMYUNIONNAME;
+
+    M128A VectorRegister[26];
+    DWORD64 VectorControl;
+
+    DWORD64 DebugControl;
+    DWORD64 LastBranchToRip;
+    DWORD64 LastBranchFromRip;
+    DWORD64 LastExceptionToRip;
+    DWORD64 LastExceptionFromRip;
+} CONTEXT;
+
+#else
 typedef struct _CONTEXT {
   DWORD ContextFlags;
 
@@ -1449,6 +1591,9 @@ typedef struct _CONTEXT {
 
   BYTE    ExtendedRegisters[MAXIMUM_SUPPORTED_EXTENSION];
 } CONTEXT;
+#endif
+
+typedef CONTEXT *PCONTEXT;
 
 struct _EXCEPTION_FRAME;
 
@@ -1462,6 +1607,21 @@ typedef struct _EXCEPTION_FRAME {
   struct _EXCEPTION_FRAME *prev;
   PEXCEPTION_HANDLER handler;
 } EXCEPTION_FRAME, *PEXCEPTION_FRAME;
+
+#define EXCEPTION_NONCONTINUABLE 0x1    // Noncontinuable exception
+#define EXCEPTION_UNWINDING 0x2         // Unwind is in progress
+#define EXCEPTION_EXIT_UNWIND 0x4       // Exit unwind is in progress
+#define EXCEPTION_STACK_INVALID 0x8     // Stack out of limits or unaligned
+#define EXCEPTION_NESTED_CALL 0x10      // Nested exception handler call
+#define EXCEPTION_TARGET_UNWIND 0x20    // Target unwind in progress
+#define EXCEPTION_COLLIDED_UNWIND 0x40  // Collided exception handler call
+
+#define EXCEPTION_UNWIND (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND | \
+                          EXCEPTION_TARGET_UNWIND | EXCEPTION_COLLIDED_UNWIND)
+
+#define IS_UNWINDING(Flag) ((Flag & EXCEPTION_UNWIND) != 0)
+#define IS_DISPATCHING(Flag) ((Flag & EXCEPTION_UNWIND) == 0)
+#define IS_TARGET_UNWIND(Flag) (Flag & EXCEPTION_TARGET_UNWIND)
 
 typedef struct _RTL_BITMAP {
     ULONG  SizeOfBitMap;
@@ -1837,9 +1997,203 @@ typedef enum _PROCESSINFOCLASS {
     MaxProcessInfoClass
 } PROCESSINFOCLASS, PROCESS_INFORMATION_CLASS;
 
+typedef enum _FILE_INFO_BY_HANDLE_CLASS {
+    FileBasicInfo,
+    FileStandardInfo,
+    FileNameInfo,
+    FileRenameInfo,
+    FileDispositionInfo,
+    FileAllocationInfo,
+    FileEndOfFileInfo,
+    FileStreamInfo,
+    FileCompressionInfo,
+    FileAttributeTagInfo,
+    FileIdBothDirectoryInfo,
+    FileIdBothDirectoryRestartInfo,
+    FileIoPriorityHintInfo,
+    FileRemoteProtocolInfo,
+    FileFullDirectoryInfo,
+    FileFullDirectoryRestartInfo,
+    FileStorageInfo,
+    FileAlignmentInfo,
+    FileIdInfo,
+    FileIdExtdDirectoryInfo,
+    FileIdExtdDirectoryRestartInfo,
+    FileDispositionInfoEx,
+    FileRenameInfoEx,
+    FileCaseSensitiveInfo,
+    FileNormalizedNameInfo,
+    MaximumFileInfoByHandleClass
+} FILE_INFO_BY_HANDLE_CLASS, *PFILE_INFO_BY_HANDLE_CLASS;
+
 typedef enum _HEAP_INFORMATION_CLASS {
     HeapCompatibilityInformation,
     HeapEnableTerminationOnCorruption
 } HEAP_INFORMATION_CLASS;
+
+typedef union _RTL_RUN_ONCE {
+    PVOID Ptr;
+} RTL_RUN_ONCE, *PRTL_RUN_ONCE;
+
+typedef union _UNWIND_CODE {
+    struct {
+        UBYTE CodeOffset;
+        UBYTE UnwindOp: 4;
+        UBYTE OpInfo: 4;
+    };
+    USHORT FrameOffset;
+} UNWIND_CODE, *PUNWIND_CODE;
+
+#define STATUS_INVALID_DISPOSITION ((DWORD) 0xC0000026L)
+
+#define UWOP_PUSH_NONVOL 0      // info == register number
+#define UWOP_ALLOC_LARGE 1      // no info, alloc size in next 2 slots
+#define UWOP_ALLOC_SMALL 2      // info == size of allocation / 8 - 1
+#define UWOP_SET_FPREG 3        // no info, FP = RSP + UNWIND_INFO.FPRegOffset*16
+#define UWOP_SAVE_NONVOL 4      // info == register number, offset in next slot
+#define UWOP_SAVE_NONVOL_FAR 5  // info == register number, offset in next 2 slots
+#define UWOP_SAVE_XMM 6         // Version 1; undocumented
+#define UWOP_EPILOG 6           // Version 2; undocumented
+#define UWOP_SAVE_XMM_FAR 7     // Version 1; undocumented
+#define UWOP_SPARE_CODE 7       // Version 2; undocumented
+#define UWOP_SAVE_XMM128 8      // info == XMM reg number, offset in next slot
+#define UWOP_SAVE_XMM128_FAR 9  // info == XMM reg number, offset in next 2 slots
+#define UWOP_PUSH_MACHFRAME 10   // info == 0: no error-code, 1: error-code
+
+enum
+{
+    UNW_FLAG_NHANDLER  = 0x00,
+    UNW_FLAG_EHANDLER  = 0x01,
+    UNW_FLAG_UHANDLER  = 0x02,
+    UNW_FLAG_CHAININFO = 0x04,
+};
+
+typedef struct _UNWIND_INFO {
+    UBYTE Version: 3;
+    UBYTE Flags: 5;
+    UBYTE SizeOfProlog;
+    UBYTE CountOfCodes;  //so the beginning of ExceptionData is known as they're both FAMs
+    UBYTE FrameRegister: 4;
+    UBYTE FrameOffset: 4;
+    UNWIND_CODE UnwindCode[1];
+    union {
+        ULONG ExceptionHandler;
+        ULONG FunctionEntry;
+    };
+    ULONG ExceptionData[];
+} UNWIND_INFO, *PUNWIND_INFO;
+
+typedef struct _RUNTIME_FUNCTION {
+    DWORD BeginAddress;
+    DWORD EndAddress;
+    DWORD UnwindData;
+} RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
+
+#define UNWIND_HISTORY_TABLE_SIZE 12
+
+typedef struct _UNWIND_HISTORY_TABLE_ENTRY {
+    DWORD64 ImageBase;
+    PRUNTIME_FUNCTION FunctionEntry;
+} UNWIND_HISTORY_TABLE_ENTRY, *PUNWIND_HISTORY_TABLE_ENTRY;
+
+typedef struct _UNWIND_HISTORY_TABLE {
+    DWORD Count;
+    BYTE LocalHint;
+    BYTE GlobalHint;
+    BYTE Search;
+    BYTE Once;
+    DWORD64 LowAddress;
+    DWORD64 HighAddress;
+    UNWIND_HISTORY_TABLE_ENTRY Entry[UNWIND_HISTORY_TABLE_SIZE];
+} UNWIND_HISTORY_TABLE, *PUNWIND_HISTORY_TABLE;
+
+typedef struct _FRAME_POINTERS {
+    ULONGLONG MemoryStackFp;
+    ULONGLONG BackingStoreFp;
+} FRAME_POINTERS, *PFRAME_POINTERS;
+
+typedef EXCEPTION_DISPOSITION
+WINAPI EXCEPTION_ROUTINE(
+        struct _EXCEPTION_RECORD *ExceptionRecord,
+        PVOID EstablisherFrame,
+        struct _CONTEXT *ContextRecord,
+        PVOID DispatcherContext);
+
+typedef EXCEPTION_ROUTINE *PEXCEPTION_ROUTINE;
+
+typedef struct _DISPATCHER_CONTEXT
+{
+    ULONG64 ControlPc;
+    ULONG64 ImageBase;
+    struct _RUNTIME_FUNCTION *FunctionEntry;
+    ULONG64 EstablisherFrame;
+    ULONG64 TargetIp;
+    CONTEXT *ContextRecord;
+    PEXCEPTION_ROUTINE LanguageHandler;
+    PVOID HandlerData;
+    struct _UNWIND_HISTORY_TABLE *HistoryTable;
+    ULONG ScopeIndex;
+    ULONG Fill0;
+} DISPATCHER_CONTEXT, *PDISPATCHER_CONTEXT;
+
+typedef struct _MEMORYSTATUSEX {
+    DWORD     dwLength;
+    DWORD     dwMemoryLoad;
+    DWORDLONG ullTotalPhys;
+    DWORDLONG ullAvailPhys;
+    DWORDLONG ullTotalPageFile;
+    DWORDLONG ullAvailPageFile;
+    DWORDLONG ullTotalVirtual;
+    DWORDLONG ullAvailVirtual;
+    DWORDLONG ullAvailExtendedVirtual;
+} MEMORYSTATUSEX, *LPMEMORYSTATUSEX;
+
+#ifdef __x86_64__
+typedef struct _KNONVOLATILE_CONTEXT_POINTERS {
+    union {
+        PM128A FloatingContext[16];
+        struct {
+            PM128A Xmm0;
+            PM128A Xmm1;
+            PM128A Xmm2;
+            PM128A Xmm3;
+            PM128A Xmm4;
+            PM128A Xmm5;
+            PM128A Xmm6;
+            PM128A Xmm7;
+            PM128A Xmm8;
+            PM128A Xmm9;
+            PM128A Xmm10;
+            PM128A Xmm11;
+            PM128A Xmm12;
+            PM128A Xmm13;
+            PM128A Xmm14;
+            PM128A Xmm15;
+        } DUMMYSTRUCTNAME;
+    } DUMMYUNIONNAME;
+
+    union {
+        PDWORD64 IntegerContext[16];
+        struct {
+            PDWORD64 Rax;
+            PDWORD64 Rcx;
+            PDWORD64 Rdx;
+            PDWORD64 Rbx;
+            PDWORD64 Rsp;
+            PDWORD64 Rbp;
+            PDWORD64 Rsi;
+            PDWORD64 Rdi;
+            PDWORD64 R8;
+            PDWORD64 R9;
+            PDWORD64 R10;
+            PDWORD64 R11;
+            PDWORD64 R12;
+            PDWORD64 R13;
+            PDWORD64 R14;
+            PDWORD64 R15;
+        } DUMMYSTRUCTNAME;
+    } DUMMYUNIONNAME2;
+} KNONVOLATILE_CONTEXT_POINTERS, *PKNONVOLATILE_CONTEXT_POINTERS;
+#endif
 
 #endif /* WINNT_TYPES_H */

@@ -6,7 +6,7 @@ CAPSTONE_LIB64 = $(CAPSTONE_DIR)/libcapstone64.a
 CAPSTONE_BUILD32 = $(CAPSTONE_DIR)/build32/libcapstone.a
 CAPSTONE_BUILD64 = $(CAPSTONE_DIR)/build64/libcapstone.a
 
-COMMON_CFLAGS = -O3 -ggdb3 -std=gnu99 -fshort-wchar -Wall -Wextra -Wno-multichar -Iinclude
+COMMON_CFLAGS = -O3 -ggdb3 -std=gnu99 -fshort-wchar -Wall -Wextra -Wno-multichar -fno-omit-frame-pointer -maccumulate-outgoing-args -Iinclude
 COMMON_CFLAGS += -MMD -MP -fstack-protector-strong
 CPPFLAGS=-DNDEBUG -D_GNU_SOURCE -D_FORTIFY_SOURCE=2 -DCAPSTONE_STATIC -I. -Iintercept -Ipeloader -I$(CAPSTONE_DIR)/include
 
@@ -18,7 +18,7 @@ LDLIBS  = -Wl,--whole-archive,peloader/libpeloader.a,--no-whole-archive $(CAPSTO
 
 # 64-bit flags
 # Use -march=x86-64 for QEMU compatibility (baseline x86-64 without AVX)
-CFLAGS64  = $(COMMON_CFLAGS) -m64 -march=x86-64 -mtune=generic
+CFLAGS64  = $(COMMON_CFLAGS) -m64 -march=x86-64 -mtune=generic -mstackrealign -pthread
 LDFLAGS64 = $(CFLAGS64) -m64 -lm -Wl,--dynamic-list=exports.lst
 LDLIBS64  = -Wl,--whole-archive,peloader/libpeloader64.a,--no-whole-archive $(CAPSTONE_LIB64)
 
@@ -62,9 +62,17 @@ peloader64:
 	make -C peloader all64
 
 intercept/hook.o: intercept
+intercept/hook.64.o: intercept64
 
 mpclient: mpclient.o intercept/hook.o | peloader capstone32
 	$(CC) $(CFLAGS) $^ -o $@ $(LDLIBS) $(LDFLAGS)
+
+# 64-bit mpclient (x64 engine support)
+mpclient_x64: mpclient_x64.64.o intercept/hook.64.o | peloader64 capstone64
+	$(CC) $(CFLAGS64) $^ -o $@ $(LDLIBS64) $(LDFLAGS64)
+
+mpclient_x64.64.o: examples/mpclient/mpclient_x64.c
+	$(CC) $(CFLAGS64) $(CPPFLAGS) -c -o $@ $<
 
 # 64-bit test target (no hook support needed for basic PE loading test)
 test64: test/test64_client.64.o | peloader64 capstone64
