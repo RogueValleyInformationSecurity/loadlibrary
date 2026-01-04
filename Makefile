@@ -71,7 +71,7 @@ mpclient: mpclient.o intercept/hook.o | peloader capstone32
 mpclient_x64: mpclient_x64.64.o intercept/hook.64.o | peloader64 capstone64
 	$(CC) $(CFLAGS64) $^ -o $@ $(LDLIBS64) $(LDFLAGS64)
 
-mpclient_x64.64.o: mpclient_x64.c
+mpclient_x64.64.o: examples/mpclient/mpclient_x64.c
 	$(CC) $(CFLAGS64) $(CPPFLAGS) -c -o $@ $<
 
 # 64-bit test target (no hook support needed for basic PE loading test)
