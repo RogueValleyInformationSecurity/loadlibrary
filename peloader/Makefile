@@ -1,6 +1,6 @@
 CAPSTONE_DIR ?= ../third_party/capstone
 # Common flags (no -march here, set per-architecture below)
-COMMON_CFLAGS = -O3 -ggdb3 -std=gnu99 -fshort-wchar -Wall -Wextra -Wno-multichar -Iinclude
+COMMON_CFLAGS = -O3 -ggdb3 -std=gnu99 -fshort-wchar -Wall -Wextra -Wno-multichar -fno-omit-frame-pointer -maccumulate-outgoing-args -Iinclude
 COMMON_CFLAGS += -MMD -MP -fstack-protector-strong
 CPPFLAGS=-DNDEBUG -D_GNU_SOURCE -D_FORTIFY_SOURCE=2 -DCAPSTONE_STATIC -I. -I$(CAPSTONE_DIR)/include
 
@@ -11,7 +11,7 @@ LDFLAGS = $(CFLAGS) -m32 -lm
 
 # 64-bit flags
 # Use -march=x86-64 for QEMU compatibility (baseline x86-64 without AVX)
-CFLAGS64 = $(COMMON_CFLAGS) -m64 -march=x86-64 -mtune=generic
+CFLAGS64 = $(COMMON_CFLAGS) -m64 -march=x86-64 -mtune=generic -mstackrealign
 LDFLAGS64 = $(CFLAGS64) -m64 -lm
 
 .PHONY: clean all64

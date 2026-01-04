@@ -49,6 +49,9 @@ STATIC LONG WINAPI RegOpenKeyExW(HANDLE hKey, PVOID lpSubKey, DWORD ulOptions, D
     } else if (strstr(ansikey, "DataCollection")) {
         *phkResult = (HANDLE) 'REG3';
         Result = 0;
+    } else {
+        *phkResult = (HANDLE) 'REGX';
+        Result = 0;
     }
     free(ansikey);
     return Result;
@@ -87,6 +90,10 @@ STATIC LONG WINAPI RegQueryInfoKeyW(
         case 'REG2':
             *lpcValues = 1;
             *lpcMaxValueNameLen = 1024;
+            break;
+        case 'REGX':
+            *lpcValues = 0;
+            *lpcMaxValueNameLen = 0;
             break;
         default:
             DebugLog("NOT SUPPROTED KEY");
@@ -204,7 +211,32 @@ STATIC NTSTATUS WINAPI RegQueryValueExW(HANDLE hKey,
                                         PDWORD lpcbData)
 {
     DebugLog("%p, %p, %p, %p, %p, %p", hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-    return 2;
+
+    if (lpType) {
+        *lpType = REG_SZ;
+    }
+
+    if (lpcbData) {
+        DWORD needed = sizeof(WCHAR);
+        if (!lpData || *lpcbData < needed) {
+            *lpcbData = needed;
+            return 0;
+        }
+        memset(lpData, 0, needed);
+        *lpcbData = needed;
+    }
+
+    return 0;
+}
+
+STATIC LONG WINAPI RegNotifyChangeKeyValue(HANDLE hKey,
+                                           BOOL bWatchSubtree,
+                                           DWORD dwNotifyFilter,
+                                           HANDLE hEvent,
+                                           BOOL fAsynchronous)
+{
+    DebugLog("%p, %u, %#x, %p, %u", hKey, bWatchSubtree, dwNotifyFilter, hEvent, fAsynchronous);
+    return 0;
 }
 
 
@@ -215,4 +247,4 @@ DECLARE_CRT_EXPORT("NtEnumerateValueKey", NtEnumerateValueKey);
 DECLARE_CRT_EXPORT("NtQueryValueKey", NtQueryValueKey);
 DECLARE_CRT_EXPORT("RegCreateKeyExW", RegCreateKeyExW);
 DECLARE_CRT_EXPORT("RegQueryValueExW", RegQueryValueExW);
-
+DECLARE_CRT_EXPORT("RegNotifyChangeKeyValue", RegNotifyChangeKeyValue);

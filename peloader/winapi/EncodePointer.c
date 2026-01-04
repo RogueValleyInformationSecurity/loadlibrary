@@ -13,23 +13,19 @@
 #include "util.h"
 
 
-// XOR cookie for pointer encoding (must be same for encode/decode).
-static uintptr_t PointerEncodeCookie = 0xDEADBEEFCAFEBABEULL;
-
 STATIC PVOID WINAPI EncodePointer(PVOID Ptr)
 {
     DebugLog("%p", Ptr);
 
-    // XOR with cookie - works correctly for both 32-bit and 64-bit pointers.
-    return (PVOID)((uintptr_t)Ptr ^ PointerEncodeCookie);
+    // Super secret high-security encryption algorithm.
+    return (PVOID)((uintptr_t)Ptr ^ ~0ULL);
 }
 
 STATIC PVOID WINAPI DecodePointer(PVOID Ptr)
 {
     DebugLog("%p", Ptr);
 
-    // Same XOR to decode.
-    return (PVOID)((uintptr_t)Ptr ^ PointerEncodeCookie);
+    return (PVOID)((uintptr_t)Ptr ^ ~0ULL);
 }
 
 

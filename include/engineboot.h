@@ -40,8 +40,9 @@ typedef struct _ENGINE_INFO {
     DWORD   field_C;
 } ENGINE_INFO, *PENGINE_INFO;
 
+#ifdef __x86_64__
 typedef struct _ENGINE_CONFIG {
-    DWORD EngineFlags;
+    ULONG_PTR EngineFlags;
     PWCHAR Inclusions;      // Example, "*.zip"
     PVOID Exceptions;
     PWCHAR UnknownString2;
@@ -52,17 +53,73 @@ typedef struct _ENGINE_CONFIG {
     DWORD field_20;
     DWORD field_24;
     DWORD field_28;
+    ULONG_PTR field_2C;     // Setting this seems to cause packer to be reported.
+    ULONG_PTR field_30;
+    ULONG_PTR field_34;
+    PCHAR UnknownAnsiString1;
+    PCHAR UnknownAnsiString2;
+} ENGINE_CONFIG, *PENGINE_CONFIG;
+#else
+typedef struct _ENGINE_CONFIG {
+    DWORD EngineFlags;
+    PWCHAR Inclusions;      // Example, "*.zip"
+    PVOID Exceptions;
+    PWCHAR UnknownString2;
+    PWCHAR QuarantineLocation;
+    DWORD field_14;
+    DWORD field_18;
+    DWORD TempPath;
+    DWORD OfflinePath;
+    DWORD field_24;
+    DWORD field_28;
     DWORD field_2C;         // Setting this seems to cause packer to be reported.
     DWORD field_30;
     DWORD field_34;
     PCHAR UnknownAnsiString1;
     PCHAR UnknownAnsiString2;
 } ENGINE_CONFIG, *PENGINE_CONFIG;
+#endif
 
 typedef struct _ENGINE_CONTEXT {
     DWORD   field_0;
 } ENGINE_CONTEXT, *PENGINE_CONTEXT;
 
+#ifdef __x86_64__
+typedef struct _BOOTENGINE_PARAMS {
+    ULONG_PTR       ClientVersion;
+    PWCHAR          SignatureLocation;
+    PVOID           SpynetSource;
+    PENGINE_CONFIG  EngineConfig;
+    PENGINE_INFO    EngineInfo;
+    PWCHAR          ScanReportLocation;
+    DWORD           BootFlags;
+    PWCHAR          LocalCopyDirectory;
+    PWCHAR          OfflineTargetOS;
+    CHAR            ProductString[16];
+    ULONG_PTR       field_34;
+    PVOID           GlobalCallback;
+    PENGINE_CONTEXT EngineContext;
+    ULONG_PTR       AvgCpuLoadFactor;
+    CHAR            field_44[16];
+    PWCHAR          SpynetReportingGUID;
+    PWCHAR          SpynetVersion;
+    PWCHAR          NISEngineVersion;
+    PWCHAR          NISSignatureVersion;
+    ULONG_PTR       FlightingEnabled;
+    DWORD           FlightingLevel;
+    PVOID           DynamicConfig;
+    DWORD           AutoSampleSubmission;
+    DWORD           EnableThreatLogging;
+    PWCHAR          ProductName;
+    DWORD           PassiveMode;
+    DWORD           SenseEnabled;
+    PWCHAR          SenseOrgId;
+    DWORD           Attributes;
+    DWORD           BlockAtFirstSeen;
+    DWORD           PUAProtection;
+    DWORD           SideBySidePassiveMode;
+} BOOTENGINE_PARAMS, *PBOOTENGINE_PARAMS;
+#else
 typedef struct _BOOTENGINE_PARAMS {
     DWORD           ClientVersion;
     PWCHAR          SignatureLocation;
@@ -97,6 +154,7 @@ typedef struct _BOOTENGINE_PARAMS {
     DWORD           PUAProtection;
     DWORD           SideBySidePassiveMode;
 } BOOTENGINE_PARAMS, *PBOOTENGINE_PARAMS;
+#endif
 
 #pragma pack(pop)
 #endif // __ENGINEBOOT_H

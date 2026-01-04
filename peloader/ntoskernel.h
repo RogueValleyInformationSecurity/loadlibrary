@@ -35,7 +35,11 @@ struct wrap_export {
 #define WIN_FUNC_DECL(name, argc)
 #define WIN_FUNC_PTR(name, argc) name
 
+#if defined(__x86_64__) || defined(__amd64__)
+#define WIN_FUNC(name, argc) WINCALL name
+#else
 #define WIN_FUNC(name, argc) (name)
+#endif
 /* map name s to f - if f is different from s */
 #define WIN_SYMBOL_MAP(s, f)
 
@@ -49,14 +53,14 @@ struct pe_image {
 
         /* Use unions for polymorphic header access */
         union {
-                IMAGE_NT_HEADERS32 *nt_hdr32;
-                IMAGE_NT_HEADERS64 *nt_hdr64;
-                void *nt_hdr;
+                PIMAGE_NT_HEADERS32 nt_hdr32;
+                PIMAGE_NT_HEADERS64 nt_hdr64;
+                PIMAGE_NT_HEADERS nt_hdr;
         };
         union {
-                IMAGE_OPTIONAL_HEADER32 *opt32;
-                IMAGE_OPTIONAL_HEADER64 *opt64;
-                void *opt_hdr;
+                PIMAGE_OPTIONAL_HEADER32 opt32;
+                PIMAGE_OPTIONAL_HEADER64 opt64;
+                PIMAGE_OPTIONAL_HEADER opt_hdr;
         };
 };
 

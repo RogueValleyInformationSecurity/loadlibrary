@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <search.h>
 #include <assert.h>
+#include <wchar.h>
 
 #include "winnt_types.h"
 #include "pe_linker.h"
@@ -21,7 +22,7 @@ typedef struct _cpinfo {
   BYTE LeadByte[MAX_LEADBYTES];
 } CPINFO, *LPCPINFO;
 
-STATIC UINT GetACP(void)
+STATIC UINT WINAPI GetACP(void)
 {
     DebugLog("");
 
@@ -47,7 +48,7 @@ STATIC WINAPI BOOL GetCPInfo(UINT CodePage, LPCPINFO lpCPInfo)
     return TRUE;
 }
 
-STATIC DWORD LocaleNameToLCID(PVOID lpName, DWORD dwFlags)
+STATIC DWORD WINAPI LocaleNameToLCID(PVOID lpName, DWORD dwFlags)
 {
     DebugLog("%p, %#x", lpName, dwFlags);
     return 0;
@@ -57,6 +58,26 @@ STATIC WINAPI int LCMapStringW(DWORD Locale, DWORD dwMapFlags, PVOID lpSrcStr, i
 {
     DebugLog("%u, %#x, %p, %d, %p, %d", Locale, dwMapFlags, lpSrcStr, cchSrc, lpDestStr, cchDest);
     return 1;
+}
+
+STATIC WINAPI int LCMapStringA(DWORD Locale, DWORD dwMapFlags, LPCSTR lpSrcStr, int cchSrc, LPSTR lpDestStr, int cchDest)
+{
+    DebugLog("%u, %#x, %p, %d, %p, %d", Locale, dwMapFlags, lpSrcStr, cchSrc, lpDestStr, cchDest);
+
+    if (!lpDestStr) {
+        return cchSrc;
+    }
+
+    if (cchSrc < 0 && lpSrcStr) {
+        cchSrc = (int)strlen(lpSrcStr);
+    }
+
+    int copy_len = cchDest > cchSrc ? cchSrc : cchDest;
+    if (copy_len > 0 && lpSrcStr) {
+        memcpy(lpDestStr, lpSrcStr, copy_len);
+    }
+
+    return copy_len;
 }
 
 #define LOCALE_NAME_USER_DEFAULT NULL
@@ -83,10 +104,58 @@ STATIC WINAPI int GetLocaleInfoEx(LPCWSTR lpLocaleName, DWORD LCType, LPWSTR lpL
     return 0;
 }
 
+STATIC DWORD WINAPI GetUserDefaultLCID(void)
+{
+    DebugLog("");
+    return 0x0409;
+}
+
+STATIC WINAPI BOOL GetStringTypeExA(DWORD Locale, DWORD dwInfoType, LPCSTR lpSrcStr, int cchSrc, WORD *lpCharType)
+{
+    DebugLog("%#x, %#x, %p, %d, %p", Locale, dwInfoType, lpSrcStr, cchSrc, lpCharType);
+
+    if (!lpCharType) {
+        return FALSE;
+    }
+
+    if (cchSrc < 0 && lpSrcStr) {
+        cchSrc = (int)strlen(lpSrcStr);
+    }
+
+    for (int i = 0; i < cchSrc; i++) {
+        lpCharType[i] = 0;
+    }
+
+    return TRUE;
+}
+
+STATIC WINAPI BOOL GetStringTypeExW(DWORD Locale, DWORD dwInfoType, LPCWSTR lpSrcStr, int cchSrc, WORD *lpCharType)
+{
+    DebugLog("%#x, %#x, %p, %d, %p", Locale, dwInfoType, lpSrcStr, cchSrc, lpCharType);
+
+    if (!lpCharType) {
+        return FALSE;
+    }
+
+    if (cchSrc < 0 && lpSrcStr) {
+        cchSrc = (int)wcslen(lpSrcStr);
+    }
+
+    for (int i = 0; i < cchSrc; i++) {
+        lpCharType[i] = 0;
+    }
+
+    return TRUE;
+}
+
 DECLARE_CRT_EXPORT("GetACP", GetACP);
 DECLARE_CRT_EXPORT("IsValidCodePage", IsValidCodePage);
 DECLARE_CRT_EXPORT("GetCPInfo", GetCPInfo);
 DECLARE_CRT_EXPORT("LocaleNameToLCID", LocaleNameToLCID);
+DECLARE_CRT_EXPORT("LCMapStringA", LCMapStringA);
 DECLARE_CRT_EXPORT("LCMapStringW", LCMapStringW);
 DECLARE_CRT_EXPORT("LCMapStringEx", LCMapStringEx);
 DECLARE_CRT_EXPORT("GetLocaleInfoEx", GetLocaleInfoEx);
+DECLARE_CRT_EXPORT("GetUserDefaultLCID", GetUserDefaultLCID);
+DECLARE_CRT_EXPORT("GetStringTypeExA", GetStringTypeExA);
+DECLARE_CRT_EXPORT("GetStringTypeExW", GetStringTypeExW);

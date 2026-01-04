@@ -48,6 +48,12 @@
 #include "scanreply.h"
 #include "streambuffer.h"
 #include "openscan.h"
+#include "mpclient.h"
+
+struct pe_image image = {
+        .entry  = NULL,
+        .name   = "engine/mpengine.dll",
+};
 
 const char header[] =
     "function log(msg) { parseFloat('__log: ' + msg); }\n"
@@ -97,10 +103,6 @@ int main(int argc, char **argv, char **envp)
     STREAMBUFFER_DESCRIPTOR ScanDescriptor;
     ENGINE_INFO EngineInfo;
     ENGINE_CONFIG EngineConfig;
-    struct pe_image image = {
-        .entry  = NULL,
-        .name   = "engine/mpengine.dll",
-    };
 
     // Load the mpengine module.
     if (pe_load_library(image.name, &image.image, &image.size) == false) {
@@ -154,9 +156,9 @@ int main(int argc, char **argv, char **envp)
 
     BootParams.ClientVersion = BOOTENGINE_PARAMS_VERSION;
     BootParams.Attributes    = BOOT_ATTR_NORMAL;
-    BootParams.SignatureLocation = L"engine";
+    BootParams.SignatureLocation = L"c:\\engine";
     BootParams.ProductName = L"Legitimate Antivirus";
-    EngineConfig.QuarantineLocation = L"quarantine";
+    EngineConfig.QuarantineLocation = L"c:\\quarantine";
     EngineConfig.Inclusions = L"*.*";
     EngineConfig.EngineFlags = 1 << 1;
     BootParams.EngineInfo = &EngineInfo;
@@ -165,10 +167,15 @@ int main(int argc, char **argv, char **envp)
 
     LogMessage("Please wait, initializing engine...");
 
-    if (__rsignal(&KernelHandle, RSIG_BOOTENGINE, &BootParams, sizeof BootParams) != 0) {
-        LogMessage("__rsignal(RSIG_BOOTENGINE) returned failure, missing definitions?");
+    DWORD boot_status = __rsignal(&KernelHandle, RSIG_BOOTENGINE, &BootParams, sizeof BootParams);
+    if (boot_status != 0 && boot_status != 0xa005) {
+        LogMessage("__rsignal(RSIG_BOOTENGINE) returned %#x, missing definitions?", boot_status);
         LogMessage("Make sure the VDM files and mpengine.dll are in the engine directory");
         return 1;
+    }
+
+    if (boot_status == 0xa005) {
+        LogMessage("__rsignal(RSIG_BOOTENGINE) returned %#x, continuing with engine initialized", boot_status);
     }
 
     ZeroMemory(&ScanParams, sizeof ScanParams);

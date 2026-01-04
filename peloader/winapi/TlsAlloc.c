@@ -90,6 +90,13 @@ static PVOID WINAPI FlsGetValue(DWORD dwFlsIndex)
     return TlsGetValue(dwFlsIndex);
 }
 
+static PVOID WINAPI FlsGetValue2(DWORD dwFlsIndex, PVOID Reserved)
+{
+    DebugLog("%#x %p", dwFlsIndex, Reserved);
+    (void)Reserved;
+    return TlsGetValue(dwFlsIndex);
+}
+
 static BOOL WINAPI FlsFree(DWORD dwFlsIndex)
 {
     DebugLog("%#x", dwFlsIndex);
@@ -110,3 +117,4 @@ DECLARE_CRT_EXPORT("FlsFree", FlsFree);
 DECLARE_CRT_EXPORT("FlsAlloc", FlsAlloc);
 DECLARE_CRT_EXPORT("FlsSetValue", FlsSetValue);
 DECLARE_CRT_EXPORT("FlsGetValue", FlsGetValue);
+DECLARE_CRT_EXPORT("FlsGetValue2", FlsGetValue2);

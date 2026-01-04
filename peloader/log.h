@@ -5,8 +5,8 @@
 # define LogMessage(fmt, ...) fprintf(stderr, fmt, __VA_ARGS__), fputc('\n', stderr), fflush(stderr)
 #else
 # ifdef NDEBUG
-#  define l_debug(format...)
-#  define DebugLog
+#  define l_debug(...) do { } while (0)
+#  define DebugLog(...) do { } while (0)
 # else
 #  define l_debug(format...) do {               \
          l_debug_(__FUNCTION__, ## format);     \

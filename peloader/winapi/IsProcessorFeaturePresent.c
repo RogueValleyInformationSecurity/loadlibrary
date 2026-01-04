@@ -24,9 +24,11 @@ STATIC BOOL WINAPI IsProcessorFeaturePresent(DWORD ProcessorFeature)
             DebugLog("IsProcessorFeaturePresent(%u) => FALSE", ProcessorFeature);
             return FALSE;
         case PF_MMX_INSTRUCTIONS_AVAILABLE:
-        case PF_FASTFAIL_AVAILABLE: // NOTE: this will cause int 0x29
             DebugLog("IsProcessorFeaturePresent(%u) => TRUE", ProcessorFeature);
             return TRUE;
+        case PF_FASTFAIL_AVAILABLE:
+            DebugLog("IsProcessorFeaturePresent(%u) => FALSE (avoid int 0x29)", ProcessorFeature);
+            return FALSE;
     }
 
     DebugLog("IsProcessorFeaturePresent(%u) => FALSE (Unknown)", ProcessorFeature);

@@ -28,6 +28,8 @@ extern void WINAPI SetLastError(DWORD dwErrCode);
 // These routines are called to check if signing certificates have expired, so
 // should return similar values.
 
+#define ERROR_INVALID_PARAMETER 87
+
 STATIC VOID WINAPI GetSystemTime(PSYSTEMTIME lpSystemTime)
 {
     memset(lpSystemTime, 0, sizeof(SYSTEMTIME));
@@ -93,6 +95,29 @@ STATIC BOOL WINAPI QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency)
     return TRUE;
 }
 
+STATIC BOOL WINAPI QueryUnbiasedInterruptTimePrecise(PULONGLONG UnbiasedTime)
+{
+    struct timespec tm;
+
+    if (!UnbiasedTime) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (clock_gettime(CLOCK_MONOTONIC_RAW, &tm) != 0) {
+        return FALSE;
+    }
+
+    *UnbiasedTime = (ULONGLONG) tm.tv_sec * 10000000ULL + (ULONGLONG)(tm.tv_nsec / 100);
+    SetLastError(0);
+    return TRUE;
+}
+
+STATIC BOOL WINAPI QueryUnbiasedInterruptTime(PULONGLONG UnbiasedTime)
+{
+    return QueryUnbiasedInterruptTimePrecise(UnbiasedTime);
+}
+
 STATIC BOOL WINAPI GetProcessTimes(HANDLE hProcess, PFILETIME lpCreationTime, PFILETIME lpExitTime, PFILETIME lpKernelTime, PFILETIME lpUserTime)
 {
     SetLastError(0);
@@ -118,6 +143,8 @@ DECLARE_CRT_EXPORT("GetSystemTimePreciseAsFileTime", GetSystemTimePreciseAsFileT
 DECLARE_CRT_EXPORT("GetSystemTimeAsFileTime", GetSystemTimeAsFileTime);
 DECLARE_CRT_EXPORT("QueryPerformanceCounter", QueryPerformanceCounter);
 DECLARE_CRT_EXPORT("QueryPerformanceFrequency", QueryPerformanceFrequency);
+DECLARE_CRT_EXPORT("QueryUnbiasedInterruptTime", QueryUnbiasedInterruptTime);
+DECLARE_CRT_EXPORT("QueryUnbiasedInterruptTimePrecise", QueryUnbiasedInterruptTimePrecise);
 DECLARE_CRT_EXPORT("GetTickCount", GetTickCount);
 DECLARE_CRT_EXPORT("GetTickCount64", GetTickCount64);
 DECLARE_CRT_EXPORT("GetProcessTimes", GetProcessTimes);

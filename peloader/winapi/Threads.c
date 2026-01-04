@@ -15,41 +15,41 @@
 #include "util.h"
 #include "winstrings.h"
 
-static __stdcall PVOID CreateThreadPoolWait(PVOID pwa)
+static WINAPI PVOID CreateThreadPoolWait(PVOID pwa)
 {
     DebugLog("");
     return (PVOID) 0x41414141;
 }
 
-static __stdcall PVOID CreateThreadPool(PVOID reserved)
+static WINAPI PVOID CreateThreadPool(PVOID reserved)
 {
     DebugLog("");
     return (PVOID) 0x41414141;
 }
 
-static __stdcall PVOID CreateThreadpoolTimer(PVOID pfnti, PVOID pv, PVOID pcbe)
+static WINAPI PVOID CreateThreadpoolTimer(PVOID pfnti, PVOID pv, PVOID pcbe)
 {
     DebugLog("");
     return (PVOID) 0x41414141;
 }
 
-static __stdcall PVOID CreateThreadpoolWork(PVOID pfnwk, PVOID pv, PVOID pcbe)
+static WINAPI PVOID CreateThreadpoolWork(PVOID pfnwk, PVOID pv, PVOID pcbe)
 {
     DebugLog("");
     return (PVOID) 0x41414141;
 }
 
-static __stdcall void CloseThreadpoolTimer(PVOID pti)
+static WINAPI void CloseThreadpoolTimer(PVOID pti)
 {
     DebugLog("%p", pti);
 }
 
-static __stdcall void InitializeConditionVariable(PVOID ConditionVariable)
+static WINAPI void InitializeConditionVariable(PVOID ConditionVariable)
 {
     DebugLog("%p", ConditionVariable);
 }
 
-static __stdcall BOOL SleepConditionVariableCS(PVOID ConditionVariable,
+static WINAPI BOOL SleepConditionVariableCS(PVOID ConditionVariable,
                                                PVOID CriticalSection,
                                                DWORD dwMilliseconds)
 {
@@ -57,36 +57,63 @@ static __stdcall BOOL SleepConditionVariableCS(PVOID ConditionVariable,
     return TRUE;
 }
 
-static __stdcall void WakeAllConditionVariable(PVOID ConditionVariable)
+static WINAPI void WakeAllConditionVariable(PVOID ConditionVariable)
 {
     DebugLog("%p", ConditionVariable);
 }
 
 
-static __stdcall PVOID CreateThreadpoolWait() { DebugLog(""); return NULL; }
-static __stdcall PVOID SetThreadpoolWait() { DebugLog(""); return NULL; }
-static __stdcall PVOID SubmitThreadpoolWork() { DebugLog(""); return NULL; }
-static __stdcall PVOID CancelThreadpoolIo() { DebugLog(""); return NULL; }
-static __stdcall PVOID CloseThreadpool() { DebugLog(""); return NULL; }
-static __stdcall PVOID CloseThreadpoolIo() { DebugLog(""); return NULL; }
-static __stdcall PVOID CloseThreadpoolWait() { DebugLog(""); return NULL; }
-static __stdcall void CloseThreadpoolWork(PVOID pwk)
+static WINAPI PVOID CreateThreadpoolWait() { DebugLog(""); return NULL; }
+static WINAPI PVOID SetThreadpoolWait() { DebugLog(""); return NULL; }
+static WINAPI PVOID SubmitThreadpoolWork() { DebugLog(""); return NULL; }
+static WINAPI PVOID CancelThreadpoolIo() { DebugLog(""); return NULL; }
+static WINAPI PVOID CloseThreadpool() { DebugLog(""); return NULL; }
+static WINAPI PVOID CloseThreadpoolIo() { DebugLog(""); return NULL; }
+static WINAPI PVOID CloseThreadpoolWait() { DebugLog(""); return NULL; }
+static WINAPI void CloseThreadpoolWork(PVOID pwk)
 {
     DebugLog("%p", pwk);
 }
-static __stdcall PVOID CreateThreadpool() { DebugLog(""); return NULL; }
-static __stdcall PVOID CreateThreadpoolIo() { DebugLog(""); return NULL; }
-static __stdcall PVOID SetThreadpoolThreadMaximum() { DebugLog(""); return NULL; }
-static __stdcall PVOID SetThreadpoolThreadMinimum() { DebugLog(""); return NULL; }
-static __stdcall PVOID StartThreadpoolIo() { DebugLog(""); return NULL; }
-static __stdcall PVOID WaitForThreadpoolIoCallbacks() { DebugLog(""); return NULL; }
-static __stdcall PVOID WaitForThreadpoolWaitCallbacks() { DebugLog(""); return NULL; }
+static WINAPI PVOID CreateThreadpool() { DebugLog(""); return NULL; }
+static WINAPI PVOID CreateThreadpoolIo() { DebugLog(""); return NULL; }
+static WINAPI PVOID SetThreadpoolThreadMaximum() { DebugLog(""); return NULL; }
+static WINAPI PVOID SetThreadpoolThreadMinimum() { DebugLog(""); return NULL; }
+static WINAPI PVOID StartThreadpoolIo() { DebugLog(""); return NULL; }
+static WINAPI PVOID WaitForThreadpoolIoCallbacks() { DebugLog(""); return NULL; }
+static WINAPI PVOID WaitForThreadpoolWaitCallbacks() { DebugLog(""); return NULL; }
 
-static __stdcall void WaitForThreadpoolWorkCallbacks(PVOID pwk, BOOL fCancelPendingCallbacks)
+static WINAPI void WaitForThreadpoolWorkCallbacks(PVOID pwk, BOOL fCancelPendingCallbacks)
 {
     DebugLog("%p %d", pwk, fCancelPendingCallbacks);
 }
 
+static WINAPI HANDLE CreateThread(LPVOID lpThreadAttributes,
+                                     SIZE_T dwStackSize,
+                                     LPVOID lpStartAddress,
+                                     LPVOID lpParameter,
+                                     DWORD dwCreationFlags,
+                                     LPDWORD lpThreadId)
+{
+    DebugLog("%p %zu %p %p %#x %p",
+             lpThreadAttributes, dwStackSize, lpStartAddress, lpParameter,
+             dwCreationFlags, lpThreadId);
+    if (lpThreadId) {
+        *lpThreadId = 1;
+    }
+    return (HANDLE)0x41414141;
+}
+
+static WINAPI BOOL GetExitCodeThread(HANDLE hThread, LPDWORD lpExitCode)
+{
+    DebugLog("%p %p", hThread, lpExitCode);
+    if (lpExitCode) {
+        *lpExitCode = 0;
+    }
+    return TRUE;
+}
+
+DECLARE_CRT_EXPORT("CreateThread", CreateThread);
+DECLARE_CRT_EXPORT("GetExitCodeThread", GetExitCodeThread);
 
 DECLARE_CRT_EXPORT("CreateThreadPoolWait", CreateThreadPoolWait);
 DECLARE_CRT_EXPORT("CreateThreadPool", CreateThreadPool);
