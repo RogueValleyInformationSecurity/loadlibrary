@@ -34,6 +34,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <signal.h>
+#include <setjmp.h>
 #include <fenv.h>
 #include <ucontext.h>
 #include <fcntl.h>
@@ -601,6 +602,49 @@ static void SigFpeHandler(int sig, siginfo_t *info, void *ctx)
 #endif
 }
 
+static void *g_image_base = NULL;
+static size_t g_image_size = 0;
+static volatile sig_atomic_t g_in_scan = 0;
+static sigjmp_buf g_scan_jmpbuf;
+
+static void SigSegvHandler(int sig, siginfo_t *info, void *ctx)
+{
+    (void)sig;
+    (void)info;
+    (void)ctx;
+
+    if (g_in_scan) {
+        // During scan, try to recover by jumping back to scan loop
+        siglongjmp(g_scan_jmpbuf, 1);
+    }
+    // If not in scan, let it crash normally
+    signal(SIGSEGV, SIG_DFL);
+    raise(SIGSEGV);
+}
+
+static void SigTrapHandler(int sig, siginfo_t *info, void *ctx)
+{
+    (void)sig;
+    (void)info;
+
+#if defined(__x86_64__)
+    ucontext_t *uc = (ucontext_t *)ctx;
+    if (uc) {
+        unsigned char *rip = (unsigned char *)uc->uc_mcontext.gregs[REG_RIP];
+        unsigned char *base = (unsigned char *)g_image_base;
+        unsigned char *end = base + g_image_size;
+
+        // Only skip INT3 instructions within the loaded PE image
+        if (base && rip >= base && rip < end) {
+            while (rip < end && *rip == 0xCC) {
+                uc->uc_mcontext.gregs[REG_RIP]++;
+                rip++;
+            }
+        }
+    }
+#endif
+}
+
 static void SetStreamNameFromPath(const char *path)
 {
     char resolved[PATH_MAX];
@@ -698,6 +742,10 @@ int main(int argc, char **argv, char **envp)
     // Handle relocations, imports, etc.
     link_pe_images(&image, 1);
 
+    // Store image bounds for SIGTRAP handler to skip INT3 padding
+    g_image_base = image.image;
+    g_image_size = image.size;
+
     // Fetch the headers to get base offsets.
     DosHeader   = (PIMAGE_DOS_HEADER) image.image;
     PeHeader    = (PIMAGE_NT_HEADERS)(image.image + DosHeader->e_lfanew);
@@ -752,8 +800,10 @@ int main(int argc, char **argv, char **envp)
     }
 
     struct sigaction trap_action;
-    memset(&trap_action, 0, sizeof trap_action);
-    trap_action.sa_handler = SIG_IGN;
+    memset(&trap_action, 0, sizeof(trap_action));
+    trap_action.sa_sigaction = SigTrapHandler;
+    trap_action.sa_flags = SA_SIGINFO;
+    sigemptyset(&trap_action.sa_mask);
     sigaction(SIGTRAP, &trap_action, NULL);
     setup_nt_threadinfo(ExceptionHandler);
 
@@ -780,6 +830,14 @@ int main(int argc, char **argv, char **envp)
         sa.sa_flags = SA_SIGINFO;
         sigemptyset(&sa.sa_mask);
         sigaction(SIGFPE, &sa, NULL);
+    }
+    {
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_sigaction = SigSegvHandler;
+        sa.sa_flags = SA_SIGINFO;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGSEGV, &sa, NULL);
     }
     MaskFpExceptions();
 
@@ -858,16 +916,30 @@ int main(int argc, char **argv, char **envp)
 
         if (ScanDescriptor.UserPtr == NULL) {
             LogMessage("failed to open file %s", open_path);
-            return 1;
+            continue;
         }
 
         LogMessage("Scanning %s...", *argv);
         sigaction(SIGTRAP, &trap_action, NULL);
 
+        // Set up crash recovery point
+        g_in_scan = 1;
+        if (sigsetjmp(g_scan_jmpbuf, 1) != 0) {
+            // Recovered from crash during scan
+            LogMessage("Scan crashed, skipping file %s", *argv);
+            g_in_scan = 0;
+            if (ScanDescriptor.UserPtr) {
+                fclose(ScanDescriptor.UserPtr);
+                ScanDescriptor.UserPtr = NULL;
+            }
+            continue;
+        }
+
         DWORD scan_status = __rsignal(&KernelHandle, RSIG_SCAN_STREAMBUFFER, &ScanParams, sizeof ScanParams);
+        g_in_scan = 0;
+
         if (scan_status != 0) {
             LogMessage("__rsignal(RSIG_SCAN_STREAMBUFFER) returned %#x, file unreadable?", scan_status);
-            return 1;
         }
 
         fclose(ScanDescriptor.UserPtr);
